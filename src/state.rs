@@ -339,6 +339,9 @@ impl State {
         self.is_surface_configured = true;
         self.depth_texture =
             texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
+
+        self.camera.width = width as f32;
+        self.camera.height = height as f32;
     }
 
     pub fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
@@ -363,15 +366,13 @@ impl State {
 
         // Draw state
         self.draw_state.clear();
-        self.draw_state
-            .draw_rectangle(0.0, 0.0, 50.0, 50.0, Color::RED);
-        for j in 0..10 {
-            for i in 0..10 {
+        for j in 0..100 {
+            for i in 0..100 {
                 self.draw_state.draw_circle(
-                    50.0,
-                    self.mouse_state.get_position().x + i as f32 * 50.0,
-                    self.mouse_state.get_position().y + j as f32 * 50.0,
-                    Color::new(i as f32 / 10.0, j as f32 / 10.0, 0.0, 1.0),
+                    20.0,
+                    self.mouse_state.get_position().x + i as f32 * 20.0,
+                    self.mouse_state.get_position().y + j as f32 * 20.0,
+                    Color::new(i as f32 / 100.0, j as f32 / 100.0, (i + j) as f32 / 200.0, 1.0),
                 );
             }
         }
@@ -386,6 +387,10 @@ impl State {
     }
 
     fn draw_shape_instances(&mut self, pass: &mut RenderPass, shape: Shape) {
+        if self.draw_state.is_shape_queue_empty(shape) {
+            return;
+        }
+
         let instance_count = self.draw_state.set_shape_buffers(&self.device, pass, shape);
         pass.draw_indexed(
             0..self.draw_state.get_shape_indices(shape),

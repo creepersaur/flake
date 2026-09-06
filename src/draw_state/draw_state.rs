@@ -56,6 +56,10 @@ impl DrawState {
         )
     }
 
+    pub fn is_shape_queue_empty(&self, shape: Shape) -> bool {
+        !self.queue.iter().any(|(x, _)| x == shape)
+    }
+
     fn get_shape_queue(&self, shape: Shape) -> Vec<Instance> {
         self.queue
             .iter()
