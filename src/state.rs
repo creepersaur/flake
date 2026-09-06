@@ -1,5 +1,5 @@
 #![allow(unused_doc_comments)]
-use crate::input::keyboard::KeyboardState;
+use crate::input::{keyboard::KeyboardState, mouse::MouseState};
 use crate::model::camera::{Camera, CameraUniform};
 use crate::model::instance::{Instance, InstanceRaw};
 use crate::model::texture;
@@ -8,6 +8,7 @@ use cgmath::prelude::*;
 use std::sync::Arc;
 use wgpu::{self, util::DeviceExt, *};
 use winit::dpi::PhysicalSize;
+use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::Window;
@@ -45,6 +46,7 @@ pub struct State {
 
     // Input
     keyboard_state: KeyboardState,
+    mouse_state: MouseState,
 
     // Instancing
     instances: Vec<Instance>,
@@ -147,6 +149,7 @@ impl State {
             camera_bind_group,
 
             keyboard_state: KeyboardState::default(),
+            mouse_state: MouseState::default(),
 
             instances,
             instance_buffer,
@@ -400,6 +403,14 @@ impl State {
         if let (KeyCode::Escape, true) = (code, is_pressed) {
             event_loop.exit();
         }
+    }
+
+    pub fn handle_mouse_button(&mut self, button: MouseButton, is_pressed: bool) {
+        self.mouse_state.set_pressed_button(button, is_pressed);
+    }
+
+    pub fn handle_mouse_motion(&mut self, x: f32, y: f32) {
+        self.mouse_state.set_position(x, y);
     }
 
     pub(crate) fn update(&mut self) {

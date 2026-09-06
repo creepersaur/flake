@@ -64,7 +64,7 @@ impl ApplicationHandler<State> for App {
                         event_loop.exit();
                     }
                 }
-            },
+            }
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -74,6 +74,15 @@ impl ApplicationHandler<State> for App {
                     },
                 ..
             } => state.handle_key(event_loop, code, key_state.is_pressed()),
+            WindowEvent::MouseInput {
+                button,
+                state: element_state,
+                ..
+            } => state.handle_mouse_button(button, element_state.is_pressed()),
+            WindowEvent::CursorMoved { position, .. } => {
+                state.handle_mouse_motion(position.x as f32, position.y as f32)
+            }
+
             _ => {}
         }
     }
