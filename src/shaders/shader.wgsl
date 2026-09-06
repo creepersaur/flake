@@ -3,6 +3,8 @@ struct InstanceInput {
     @location(6) model_matrix_1: vec4<f32>,
     @location(7) model_matrix_2: vec4<f32>,
     @location(8) model_matrix_3: vec4<f32>,
+    @location(9) model_color: vec4<f32>,
+    @location(10) shape: u32,
 };
 
 
@@ -10,7 +12,7 @@ struct InstanceInput {
 struct CameraUniform {
     view_proj: mat4x4<f32>,
 };
-@group(1) @binding(0)
+@group(0) @binding(0)
 var<uniform> camera: CameraUniform;
 
 struct VertexInput {
@@ -20,7 +22,9 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) tex_coords: vec2<f32>,
+    @location(0) color: vec4<f32>,
+    @location(1) @interpolate(flat) shape: u32,
+    @location(2) uv: vec2<f32>,
 }
 
 @vertex
@@ -36,19 +40,22 @@ fn vs_main(
     );
 
     var out: VertexOutput;
-    out.tex_coords = model.tex_coords;
+    out.color = instance.model_color;
+    out.shape = instance.shape;
+    out.uv = model.tex_coords;
     out.clip_position = camera.view_proj * model_matrix * vec4<f32>(model.position, 1.0);
     return out;
 }
 
 // Fragment shader
 
-@group(0) @binding(0)
-var t_diffuse: texture_2d<f32>;
-@group(0) @binding(1)
-var s_diffuse: sampler;
-
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(t_diffuse, s_diffuse, in.tex_coords);
+    if in.shape == 1 {
+        if length(in.uv - vec2(0.5, 0.5)) > 0.5 {
+            return vec4(0);
+        }
+    }
+
+    return in.color;
 }

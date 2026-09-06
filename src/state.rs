@@ -1,10 +1,17 @@
 #![allow(unused_doc_comments)]
+use crate::camera::camera2d::Camera2D;
+use crate::camera::camera3d::Camera3D;
+use crate::camera::{Camera, CameraUniform};
+use crate::draw_state::draw_state::DrawState;
 use crate::input::{keyboard::KeyboardState, mouse::MouseState};
-use crate::model::camera::{Camera, CameraUniform};
-use crate::model::instance::{Instance, InstanceRaw};
+use crate::model::instance::InstanceRaw;
 use crate::model::texture;
-use crate::model::vertex::{INDICES, VERTICES, Vertex};
+use crate::model::vertex::Vertex;
+use crate::shapes::Shape;
+use crate::shapes::color::Color;
+use cgmath::Vector2;
 use cgmath::prelude::*;
+use device_query::DeviceState;
 use std::sync::Arc;
 use wgpu::{self, util::DeviceExt, *};
 use winit::dpi::PhysicalSize;
@@ -12,13 +19,6 @@ use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::Window;
-
-const NUM_INSTANCES_PER_ROW: u32 = 10;
-const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(
-    NUM_INSTANCES_PER_ROW as f32 * 0.5,
-    0.0,
-    NUM_INSTANCES_PER_ROW as f32 * 0.5,
-);
 
 pub struct State {
     // Window, Surface & Device
@@ -31,26 +31,20 @@ pub struct State {
 
     // Pipeline
     render_pipeline: RenderPipeline,
-    vertex_buffer: Buffer,
-    index_buffer: Buffer,
-    num_indices: u32,
-
-    diffuse_bind_group: BindGroup,
     depth_texture: texture::Texture,
 
+    draw_state: DrawState,
+
     // Camera
-    camera: Camera,
+    camera: Camera2D,
     camera_uniform: CameraUniform,
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
 
     // Input
+    device_state: DeviceState,
     keyboard_state: KeyboardState,
     mouse_state: MouseState,
-
-    // Instancing
-    instances: Vec<Instance>,
-    instance_buffer: Buffer,
 }
 
 impl State {
@@ -62,73 +56,23 @@ impl State {
         let config = Self::get_surface_config(&surface, size, &adapter);
 
         /// ## Camera
-        let camera = Self::get_camera(config.width, config.height);
+        let camera = Self::get_camera2d(config.width, config.height);
         let (camera_uniform, camera_buffer) = Self::get_camera_uniform_buffer(&camera, &device);
         let (camera_bind_group, camera_bind_group_layout) =
             Self::get_camera_bind_group(&camera_buffer, &device);
 
-        /// ## Instancing
-        let instances = (0..NUM_INSTANCES_PER_ROW)
-            .flat_map(|z| {
-                (0..NUM_INSTANCES_PER_ROW).map(move |x| {
-                    let position = cgmath::Vector3 {
-                        x: x as f32,
-                        y: 0.0,
-                        z: z as f32,
-                    } - INSTANCE_DISPLACEMENT;
-
-                    let rotation = if position.is_zero() {
-                        // this is needed so an object at (0, 0, 0) won't get scaled to zero
-                        // as Quaternions can affect scale if they're not created correctly
-                        cgmath::Quaternion::from_axis_angle(
-                            cgmath::Vector3::unit_z(),
-                            cgmath::Deg(0.0),
-                        )
-                    } else {
-                        cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
-                    };
-
-                    Instance { position, rotation }
-                })
-            })
-            .collect::<Vec<_>>();
-        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        let instance_buffer = device.create_buffer_init(&util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: BufferUsages::VERTEX,
-        });
-
-        /// ## Textures
+        /// ## Depth Texture
         let depth_texture =
             texture::Texture::create_depth_texture(&device, &config, "depth_texture");
-        let (texture_bind_group_layout, diffuse_bind_group) =
-            Self::get_texture_bind_group(&device, &queue);
 
         /// # Render Pipeline
-        let render_pipeline = Self::get_render_pipeline(
-            &device,
-            &config,
-            &texture_bind_group_layout,
-            &camera_bind_group_layout,
-        );
-
-        /// ## Vertex & Input Buffers
-        let vertex_buffer = device.create_buffer_init(&util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(VERTICES),
-            usage: BufferUsages::VERTEX,
-        });
-
-        let index_buffer = device.create_buffer_init(&util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(INDICES),
-            usage: BufferUsages::INDEX,
-        });
+        let render_pipeline =
+            Self::get_render_pipeline(&device, &config, &camera_bind_group_layout);
 
         Ok(Self {
-            window,
+            draw_state: DrawState::new(&device),
 
+            window,
             surface,
             device,
             queue,
@@ -136,28 +80,22 @@ impl State {
             is_surface_configured: false,
 
             render_pipeline,
-            vertex_buffer,
-            index_buffer,
-            num_indices: INDICES.len() as u32,
-
             depth_texture,
-            diffuse_bind_group,
 
             camera,
             camera_uniform,
             camera_buffer,
             camera_bind_group,
 
+            device_state: DeviceState::new(),
             keyboard_state: KeyboardState::default(),
             mouse_state: MouseState::default(),
-
-            instances,
-            instance_buffer,
         })
     }
 
-    fn get_camera(width: u32, height: u32) -> Camera {
-        Camera {
+    #[allow(unused)]
+    fn get_camera3d(width: u32, height: u32) -> Camera3D {
+        Camera3D {
             eye: (0.0, 1.0, 2.0).into(),
             target: (0.0, 0.0, 0.0).into(),
             up: cgmath::Vector3::unit_y(),
@@ -168,7 +106,16 @@ impl State {
         }
     }
 
-    fn get_camera_uniform_buffer(camera: &Camera, device: &Device) -> (CameraUniform, Buffer) {
+    fn get_camera2d(width: u32, height: u32) -> Camera2D {
+        Camera2D {
+            position: Vector2::zero(),
+            width: width as f32,
+            height: height as f32,
+            zoom: 1.0,
+        }
+    }
+
+    fn get_camera_uniform_buffer(camera: &impl Camera, device: &Device) -> (CameraUniform, Buffer) {
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_proj(camera);
 
@@ -214,8 +161,8 @@ impl State {
 
     fn get_instance_and_surface(
         window: Arc<Window>,
-    ) -> anyhow::Result<(wgpu::Instance, Surface<'static>)> {
-        let instance = wgpu::Instance::new(InstanceDescriptor {
+    ) -> anyhow::Result<(Instance, Surface<'static>)> {
+        let instance = Instance::new(InstanceDescriptor {
             backends: Backends::PRIMARY,
             flags: Default::default(),
             memory_budget_thresholds: Default::default(),
@@ -228,7 +175,7 @@ impl State {
 
     async fn get_adapter(
         surface: &Surface<'_>,
-        instance: &wgpu::Instance,
+        instance: &Instance,
     ) -> Result<Adapter, RequestAdapterError> {
         instance
             .request_adapter(&RequestAdapterOptions {
@@ -267,7 +214,7 @@ impl State {
             format,
             width: size.width,
             height: size.height,
-            present_mode: caps.present_modes[0],
+            present_mode: PresentMode::Immediate,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
@@ -276,6 +223,7 @@ impl State {
     }
 
     /// Loads the diffuse texture and builds its bind group layout + bind group.
+    #[allow(unused)]
     fn get_texture_bind_group(device: &Device, queue: &Queue) -> (BindGroupLayout, BindGroup) {
         let diffuse_texture = texture::Texture::from_bytes(
             device,
@@ -328,17 +276,13 @@ impl State {
     fn get_render_pipeline(
         device: &Device,
         config: &SurfaceConfiguration,
-        texture_bind_group_layout: &BindGroupLayout,
         camera_bind_group_layout: &BindGroupLayout,
     ) -> RenderPipeline {
         let shader = device.create_shader_module(include_wgsl!("shaders/shader.wgsl"));
 
         let layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[
-                Some(texture_bind_group_layout),
-                Some(camera_bind_group_layout),
-            ],
+            bind_group_layouts: &[Some(camera_bind_group_layout)],
             immediate_size: 0,
         });
 
@@ -358,7 +302,7 @@ impl State {
                 entry_point: Some("fs_main"),
                 targets: &[Some(ColorTargetState {
                     format: config.format,
-                    blend: Some(BlendState::REPLACE),
+                    blend: Some(BlendState::ALPHA_BLENDING),
                     write_mask: ColorWrites::ALL,
                 })],
                 compilation_options: Default::default(),
@@ -367,14 +311,14 @@ impl State {
             primitive: PrimitiveState {
                 topology: PrimitiveTopology::TriangleList,
                 front_face: FrontFace::Ccw,
-                cull_mode: Some(Face::Back),
+                //cull_mode: Some(Face::Back),
                 ..Default::default()
             },
 
             depth_stencil: Some(DepthStencilState {
                 format: texture::Texture::DEPTH_FORMAT,
                 depth_write_enabled: Some(true),
-                depth_compare: Some(CompareFunction::Less),
+                depth_compare: Some(CompareFunction::LessEqual),
                 stencil: StencilState::default(),
                 bias: DepthBiasState::default(),
             }),
@@ -414,29 +358,22 @@ impl State {
     }
 
     pub(crate) fn update(&mut self) {
-        if self.keyboard_state.is_key_pressed(KeyCode::KeyA) {
-            self.camera.eye -= cgmath::Vector3::unit_x() * 0.05;
-            self.camera.target -= cgmath::Vector3::unit_x() * 0.05;
-        }
-        if self.keyboard_state.is_key_pressed(KeyCode::KeyD) {
-            self.camera.eye += cgmath::Vector3::unit_x() * 0.05;
-            self.camera.target += cgmath::Vector3::unit_x() * 0.05;
-        }
-        if self.keyboard_state.is_key_pressed(KeyCode::KeyW) {
-            self.camera.eye -= cgmath::Vector3::unit_z() * 0.05;
-            self.camera.target -= cgmath::Vector3::unit_z() * 0.05;
-        }
-        if self.keyboard_state.is_key_pressed(KeyCode::KeyS) {
-            self.camera.eye += cgmath::Vector3::unit_z() * 0.05;
-            self.camera.target += cgmath::Vector3::unit_z() * 0.05;
-        }
-        if self.keyboard_state.is_key_pressed(KeyCode::KeyQ) {
-            self.camera.eye -= cgmath::Vector3::unit_y() * 0.05;
-            self.camera.target -= cgmath::Vector3::unit_y() * 0.05;
-        }
-        if self.keyboard_state.is_key_pressed(KeyCode::KeyE) {
-            self.camera.eye += cgmath::Vector3::unit_y() * 0.05;
-            self.camera.target += cgmath::Vector3::unit_y() * 0.05;
+        self.mouse_state
+            .update_position(&self.window, &self.device_state);
+
+        // Draw state
+        self.draw_state.clear();
+        self.draw_state
+            .draw_rectangle(0.0, 0.0, 50.0, 50.0, Color::RED);
+        for j in 0..10 {
+            for i in 0..10 {
+                self.draw_state.draw_circle(
+                    50.0,
+                    self.mouse_state.get_position().x + i as f32 * 50.0,
+                    self.mouse_state.get_position().y + j as f32 * 50.0,
+                    Color::new(i as f32 / 10.0, j as f32 / 10.0, 0.0, 1.0),
+                );
+            }
         }
 
         // Update camera uniform
@@ -445,6 +382,15 @@ impl State {
             &self.camera_buffer,
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
+        );
+    }
+
+    fn draw_shape_instances(&mut self, pass: &mut RenderPass, shape: Shape) {
+        let instance_count = self.draw_state.set_shape_buffers(&self.device, pass, shape);
+        pass.draw_indexed(
+            0..self.draw_state.get_shape_indices(shape),
+            0,
+            0..instance_count as _,
         );
     }
 
@@ -484,7 +430,7 @@ impl State {
                     resolve_target: None,
                     depth_slice: None,
                     ops: Operations {
-                        load: LoadOp::Clear(Color {
+                        load: LoadOp::Clear(wgpu::Color {
                             r: 0.1,
                             g: 0.2,
                             b: 0.3,
@@ -504,24 +450,16 @@ impl State {
                 ..Default::default()
             });
 
-            // Set the pipeline
             pass.set_pipeline(&self.render_pipeline);
+            pass.set_bind_group(0, &self.camera_bind_group, &[]);
 
-            // Bind Groups
-            pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
-            pass.set_bind_group(1, &self.camera_bind_group, &[]);
-
-            // Buffers
-            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-            pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
-
-            // Draw
-            pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as _);
+            self.draw_shape_instances(&mut pass, Shape::Rectangle);
+            self.draw_shape_instances(&mut pass, Shape::Circle);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
         self.queue.present(output);
+
         Ok(())
     }
 }
