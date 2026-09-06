@@ -1,7 +1,7 @@
 mod state;
 mod app;
-mod vertex;
-mod texture;
+mod input;
+mod model;
 
 fn main() -> anyhow::Result<()> {
     app::App::run()?;
