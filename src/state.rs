@@ -366,16 +366,15 @@ impl State {
 
         // Draw state
         self.draw_state.clear();
-        for j in 0..100 {
-            for i in 0..100 {
-                self.draw_state.draw_circle(
-                    20.0,
-                    self.mouse_state.get_position().x + i as f32 * 20.0,
-                    self.mouse_state.get_position().y + j as f32 * 20.0,
-                    Color::new(i as f32 / 100.0, j as f32 / 100.0, (i + j) as f32 / 200.0, 1.0),
-                );
-            }
-        }
+        self.draw_state.draw_triangle(
+            200.0,
+            450.0,
+            400.0,
+            150.0,
+            600.0,
+            450.0,
+            Color::RED,
+        );
 
         // Update camera uniform
         self.camera_uniform.update_view_proj(&self.camera);
@@ -460,6 +459,7 @@ impl State {
 
             self.draw_shape_instances(&mut pass, Shape::Rectangle);
             self.draw_shape_instances(&mut pass, Shape::Circle);
+            self.draw_shape_instances(&mut pass, Shape::Triangle);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

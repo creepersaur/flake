@@ -5,6 +5,9 @@ struct InstanceInput {
     @location(8) model_matrix_3: vec4<f32>,
     @location(9) model_color: vec4<f32>,
     @location(10) shape: u32,
+    @location(11) tri_point_1: vec2<f32>,
+    @location(12) tri_point_2: vec2<f32>,
+    @location(13) tri_point_3: vec2<f32>,
 };
 
 
@@ -29,6 +32,7 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(
+    @builtin(vertex_index) vertex_index: u32,
     model: VertexInput,
     instance: InstanceInput,
 ) -> VertexOutput {
@@ -43,7 +47,18 @@ fn vs_main(
     out.color = instance.model_color;
     out.shape = instance.shape;
     out.uv = model.tex_coords;
-    out.clip_position = camera.view_proj * model_matrix * vec4<f32>(model.position, 1.0);
+
+    if (instance.shape == 2) {
+        var tri_points = array<vec2<f32>, 3>(
+            instance.tri_point_1,
+            instance.tri_point_2,
+            instance.tri_point_3,
+        );
+        out.clip_position = camera.view_proj * model_matrix * vec4<f32>(tri_points[vertex_index], 0.0, 1.0);
+    } else {
+        out.clip_position = camera.view_proj * model_matrix * vec4<f32>(model.position, 1.0);
+    }
+
     return out;
 }
 

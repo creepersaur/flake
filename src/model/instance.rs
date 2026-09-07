@@ -1,5 +1,6 @@
 use crate::shapes::Shape;
 use crate::shapes::color::Color;
+use cgmath::Vector2;
 
 #[derive(Clone, Debug)]
 pub struct Instance {
@@ -8,6 +9,7 @@ pub struct Instance {
     pub size: cgmath::Vector2<f32>,
     pub color: Color,
     pub shape: Shape,
+    pub tri_points: [Vector2<f32>; 3],
 }
 
 #[repr(C)]
@@ -16,6 +18,7 @@ pub struct InstanceRaw {
     model: [[f32; 4]; 4],
     color: [f32; 4],
     shape: u32,
+    tri_points: [[f32; 2]; 3],
 }
 
 impl Instance {
@@ -27,6 +30,11 @@ impl Instance {
             .into(),
             color: self.color.to_array(),
             shape: self.shape as u32,
+            tri_points: [
+                self.tri_points[0].into(),
+                self.tri_points[1].into(),
+                self.tri_points[2].into(),
+            ],
         }
     }
 }
@@ -75,6 +83,29 @@ impl InstanceRaw {
                     offset: size_of::<[f32; 20]>() as wgpu::BufferAddress,
                     shader_location: 10,
                     format: wgpu::VertexFormat::Uint32,
+                },
+                // Tri point 0
+                wgpu::VertexAttribute {
+                    offset: size_of::<[f32; 20]>() as wgpu::BufferAddress
+                        + size_of::<u32>() as wgpu::BufferAddress,
+                    shader_location: 11,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                // Tri point 1
+                wgpu::VertexAttribute {
+                    offset: size_of::<[f32; 20]>() as wgpu::BufferAddress
+                        + size_of::<u32>() as wgpu::BufferAddress
+                        + size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                    shader_location: 12,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                // Tri point 2
+                wgpu::VertexAttribute {
+                    offset: size_of::<[f32; 20]>() as wgpu::BufferAddress
+                        + size_of::<u32>() as wgpu::BufferAddress
+                        + size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 13,
+                    format: wgpu::VertexFormat::Float32x2,
                 },
             ],
         }

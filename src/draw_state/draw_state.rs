@@ -1,19 +1,24 @@
 use crate::model::instance::Instance;
 use crate::shapes::Shape;
+use crate::shapes::circle::{CIRCLE_INDICES, CIRCLE_VERTICES};
 use crate::shapes::color::Color;
 use crate::shapes::rectangle::{RECT_INDICES, RECT_VERTICES};
+use crate::shapes::triangle::{TRI_INDICES, TRI_VERTICES};
 use cgmath::{Quaternion, Vector2, Vector3, Zero};
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, BufferUsages, Device, IndexFormat, RenderPass, util};
-use crate::shapes::circle::{CIRCLE_INDICES, CIRCLE_VERTICES};
 
 #[derive(Clone, Debug)]
 pub struct DrawState {
-    rect_vertex_buffer: Buffer, // Rectangle
+    /// # Rectangle
+    rect_vertex_buffer: Buffer,
     rect_index_buffer: Buffer,
-
-    circle_vertex_buffer: Buffer, // Circle
+    /// # Circle
+    circle_vertex_buffer: Buffer,
     circle_index_buffer: Buffer,
+    /// # Triangle
+    triangle_vertex_buffer: Buffer,
+    triangle_index_buffer: Buffer,
 
     queue: Vec<(Shape, Instance)>,
 }
@@ -24,6 +29,8 @@ impl DrawState {
             Self::create_vertex_index_buffer(device, "Rectangle", RECT_VERTICES, RECT_INDICES);
         let (circle_vertex_buffer, circle_index_buffer) =
             Self::create_vertex_index_buffer(device, "Circle", CIRCLE_VERTICES, CIRCLE_INDICES);
+        let (triangle_vertex_buffer, triangle_index_buffer) =
+            Self::create_vertex_index_buffer(device, "Triangle", TRI_VERTICES, TRI_INDICES);
 
         Self {
             rect_vertex_buffer,
@@ -31,6 +38,9 @@ impl DrawState {
 
             circle_vertex_buffer,
             circle_index_buffer,
+
+            triangle_vertex_buffer,
+            triangle_index_buffer,
 
             queue: Default::default(),
         }
@@ -82,6 +92,7 @@ impl DrawState {
         let (vertex_buffer, index_buffer) = match shape {
             Shape::Rectangle => (&self.rect_vertex_buffer, &self.rect_index_buffer),
             Shape::Circle => (&self.circle_vertex_buffer, &self.circle_index_buffer),
+            Shape::Triangle => (&self.triangle_vertex_buffer, &self.triangle_index_buffer),
         };
 
         let instances = self.get_shape_queue(shape);
@@ -97,6 +108,7 @@ impl DrawState {
         match shape {
             Shape::Rectangle => RECT_INDICES.len() as u32,
             Shape::Circle => CIRCLE_INDICES.len() as u32,
+            Shape::Triangle => TRI_INDICES.len() as u32,
         }
     }
 }
@@ -114,7 +126,8 @@ impl DrawState {
                 size: Vector2::new(w, h),
                 rotation: Quaternion::zero(),
                 color,
-                shape: Shape::Rectangle
+                shape: Shape::Rectangle,
+                tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()]
             },
         ));
     }
@@ -127,7 +140,31 @@ impl DrawState {
                 size: Vector2::new(r, r),
                 rotation: Quaternion::zero(),
                 color,
-                shape: Shape::Circle
+                shape: Shape::Circle,
+                tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()]
+            },
+        ));
+    }
+
+    pub fn draw_triangle(
+        &mut self,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        x3: f32,
+        y3: f32,
+        color: Color,
+    ) {
+        self.queue.push((
+            Shape::Triangle,
+            Instance {
+                position: Vector3::new(0.0, 0.0, 0.0),
+                size: Vector2::new(1.0, 1.0),
+                rotation: Quaternion::zero(),
+                color,
+                shape: Shape::Triangle,
+                tri_points: [Vector2::new(x1, y1), Vector2::new(x2, y2), Vector2::new(x3, y3)]
             },
         ));
     }
