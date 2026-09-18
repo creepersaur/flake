@@ -170,6 +170,7 @@ impl State {
             display: None,
         });
         let surface = instance.create_surface(window)?;
+
         Ok((instance, surface))
     }
 
@@ -365,16 +366,23 @@ impl State {
             .update_position(&self.window, &self.device_state);
 
         // Draw state
-        self.draw_state.clear();
-        self.draw_state.draw_triangle(
-            200.0,
-            450.0,
-            400.0,
-            150.0,
-            600.0,
-            450.0,
-            Color::RED,
-        );
+        {
+            self.draw_state.clear();
+            self.draw_state
+                .draw_triangle(200.0, 450.0, 400.0, 150.0, 600.0, 450.0, Color::RED);
+
+            self.draw_state.draw_rectangle(50.0, 50.0, 50.0, 50.0, Color::BLACK);
+
+            self.draw_state.draw_circle(50.0, 200.0, 10.0, Color::RED);
+            self.draw_state.draw_line(50.0, 200.0, 100.0, 100.0, 5.0, Color::BLUE);
+
+            self.draw_state.draw_poly_line(&[
+                Vector2::new(100.0, 100.0),
+                Vector2::new(150.0, 100.0),
+                Vector2::new(200.0, 200.0),
+                Vector2::new(50.0, 300.0),
+            ], 5.0, Color::MAGENTA, true, true);
+        }
 
         // Update camera uniform
         self.camera_uniform.update_view_proj(&self.camera);
