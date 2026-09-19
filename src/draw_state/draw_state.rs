@@ -1,117 +1,75 @@
-use crate::model::instance::Instance;
-use crate::shapes::Shape;
+use crate::model::instance::{Instance, InstanceRaw};
 use crate::shapes::circle::{CIRCLE_INDICES, CIRCLE_VERTICES};
 use crate::shapes::color::Color;
+use crate::shapes::polygon::{cross, point_in_tri};
 use crate::shapes::rectangle::{RECT_INDICES, RECT_VERTICES};
 use crate::shapes::triangle::{TRI_INDICES, TRI_VERTICES};
-use cgmath::num_traits::real::Real;
-use cgmath::{InnerSpace, MetricSpace, Quaternion, Rotation, Rotation3, Vector2, Vector3, Zero};
-use wgpu::util::DeviceExt;
-use wgpu::{Buffer, BufferUsages, Device, IndexFormat, RenderPass, util};
-use crate::shapes::polygon::{cross, point_in_tri};
+use crate::shapes::{Shape, ShapeBuffer};
+use cgmath::{InnerSpace, MetricSpace, One, Quaternion, Rotation3, Vector2, Vector3, Zero};
+use wgpu::{Device, Queue, RenderPass};
 
 #[derive(Clone, Debug)]
 pub struct DrawState {
-    /// # Rectangle
-    rect_vertex_buffer: Buffer,
-    rect_index_buffer: Buffer,
-    /// # Circle
-    circle_vertex_buffer: Buffer,
-    circle_index_buffer: Buffer,
-    /// # Triangle
-    triangle_vertex_buffer: Buffer,
-    triangle_index_buffer: Buffer,
+    rect_buffer: ShapeBuffer,
+    circle_buffer: ShapeBuffer,
+    triangle_buffer: ShapeBuffer,
 
     queue: Vec<(Shape, Instance)>,
 }
 
 impl DrawState {
     pub fn new(device: &Device) -> Self {
-        let (rect_vertex_buffer, rect_index_buffer) =
-            Self::create_vertex_index_buffer(device, "Rectangle", RECT_VERTICES, RECT_INDICES);
-        let (circle_vertex_buffer, circle_index_buffer) =
-            Self::create_vertex_index_buffer(device, "Circle", CIRCLE_VERTICES, CIRCLE_INDICES);
-        let (triangle_vertex_buffer, triangle_index_buffer) =
-            Self::create_vertex_index_buffer(device, "Triangle", TRI_VERTICES, TRI_INDICES);
+        let rect_buffer = ShapeBuffer::new(
+            device,
+            Shape::Rectangle,
+            "Rectangle Buffer",
+            RECT_VERTICES,
+            RECT_INDICES,
+        );
+        let circle_buffer = ShapeBuffer::new(
+            device,
+            Shape::Circle,
+            "Circle Buffer",
+            CIRCLE_VERTICES,
+            CIRCLE_INDICES,
+        );
+        let triangle_buffer = ShapeBuffer::new(
+            device,
+            Shape::Triangle,
+            "Triangle Buffer",
+            TRI_VERTICES,
+            TRI_INDICES,
+        );
 
         Self {
-            rect_vertex_buffer,
-            rect_index_buffer,
-
-            circle_vertex_buffer,
-            circle_index_buffer,
-
-            triangle_vertex_buffer,
-            triangle_index_buffer,
+            rect_buffer,
+            circle_buffer,
+            triangle_buffer,
 
             queue: Default::default(),
         }
     }
 
-    pub fn create_vertex_index_buffer<A: bytemuck::Pod, B: bytemuck::Pod>(
-        device: &Device,
-        label: &str,
-        vertices: &[A],
-        indices: &[B],
-    ) -> (Buffer, Buffer) {
-        (
-            device.create_buffer_init(&util::BufferInitDescriptor {
-                label: Some(&format!("{} Vertex Buffer", label)),
-                contents: bytemuck::cast_slice(vertices),
-                usage: BufferUsages::VERTEX,
-            }),
-            device.create_buffer_init(&util::BufferInitDescriptor {
-                label: Some(&format!("{} Index Buffer", label)),
-                contents: bytemuck::cast_slice(indices),
-                usage: BufferUsages::INDEX,
-            }),
-        )
-    }
-
-    pub fn is_shape_queue_empty(&self, shape: Shape) -> bool {
-        !self.queue.iter().any(|(x, _)| x == shape)
-    }
-
-    fn get_shape_queue(&self, shape: Shape) -> Vec<Instance> {
-        self.queue
-            .iter()
-            .filter(|(x, _)| x == shape)
-            .map(|(_, instance)| instance.clone())
-            .collect()
-    }
-
-    fn get_instance_buffer(instances: &[Instance], device: &Device) -> Buffer {
-        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-
-        device.create_buffer_init(&util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: BufferUsages::VERTEX,
-        })
-    }
-
-    pub fn set_shape_buffers(&self, device: &Device, pass: &mut RenderPass, shape: Shape) -> usize {
-        let (vertex_buffer, index_buffer) = match shape {
-            Shape::Rectangle => (&self.rect_vertex_buffer, &self.rect_index_buffer),
-            Shape::Circle => (&self.circle_vertex_buffer, &self.circle_index_buffer),
-            Shape::Triangle => (&self.triangle_vertex_buffer, &self.triangle_index_buffer),
-        };
-
-        let instances = self.get_shape_queue(shape);
-
-        pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-        pass.set_vertex_buffer(1, Self::get_instance_buffer(&instances, device).slice(..));
-        pass.set_index_buffer(index_buffer.slice(..), IndexFormat::Uint16);
-
-        instances.len()
-    }
-
-    pub fn get_shape_indices(&self, shape: Shape) -> u32 {
-        match shape {
-            Shape::Rectangle => RECT_INDICES.len() as u32,
-            Shape::Circle => CIRCLE_INDICES.len() as u32,
-            Shape::Triangle => TRI_INDICES.len() as u32,
+    pub fn upload(&mut self, device: &Device, queue: &Queue) {
+        for buf in [
+            &mut self.rect_buffer,
+            &mut self.circle_buffer,
+            &mut self.triangle_buffer,
+        ] {
+            let raw: Vec<InstanceRaw> = self
+                .queue
+                .iter()
+                .filter(|(s, _)| *s == buf.shape)
+                .map(|(_, i)| i.to_raw())
+                .collect();
+            buf.upload(device, queue, &raw);
         }
+    }
+
+    pub fn draw<'a>(&'a self, pass: &mut RenderPass<'a>) {
+        self.rect_buffer.draw(pass);
+        self.circle_buffer.draw(pass);
+        self.triangle_buffer.draw(pass);
     }
 }
 
@@ -126,12 +84,34 @@ impl DrawState {
             Instance {
                 position: Vector3::new(x, y, 0.0),
                 size: Vector2::new(w, h),
-                rotation: Quaternion::zero(),
+                rotation: Quaternion::one(),
                 color,
                 shape: Shape::Rectangle,
                 tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()],
             },
         ));
+    }
+
+    pub fn draw_rectangle_lines(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        thickness: f32,
+        color: Color,
+    ) {
+        self.draw_line(
+            x - thickness / 2.0,
+            y,
+            x + w + thickness / 2.0,
+            y,
+            thickness,
+            color,
+        );
+        self.draw_line(x + w, y, x + w, y + h + thickness / 2.0, thickness, color);
+        self.draw_line(x, y + h, x + w + thickness / 2.0, y + h, thickness, color);
+        self.draw_line(x, y, x, y + h + thickness / 2.0, thickness, color);
     }
 
     pub fn draw_rectangle_rotated(
@@ -162,12 +142,26 @@ impl DrawState {
             Instance {
                 position: Vector3::new(x, y, 0.0),
                 size: Vector2::new(r, r),
-                rotation: Quaternion::zero(),
+                rotation: Quaternion::one(),
                 color,
                 shape: Shape::Circle,
                 tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()],
             },
         ));
+    }
+
+    pub fn draw_circle_lines(&mut self, x: f32, y: f32, r: f32, thickness: f32, color: Color) {
+        let segments = ((r.sqrt() * 8.0) as usize).clamp(16, 128);
+        let step = std::f32::consts::TAU / segments as f32;
+
+        let points: Vec<Vector2<f32>> = (0..segments)
+            .map(|i| {
+                let a = i as f32 * step;
+                Vector2::new(x + r/2.0 * a.cos(), y + r/2.0 * a.sin())
+            })
+            .collect();
+
+        self.draw_poly_line_miter(&points, thickness, color, true);
     }
 
     pub fn draw_triangle(
@@ -185,7 +179,7 @@ impl DrawState {
             Instance {
                 position: Vector3::new(0.0, 0.0, 0.0),
                 size: Vector2::new(1.0, 1.0),
-                rotation: Quaternion::zero(),
+                rotation: Quaternion::one(),
                 color,
                 shape: Shape::Triangle,
                 tri_points: [
@@ -195,6 +189,24 @@ impl DrawState {
                 ],
             },
         ));
+    }
+
+    pub fn draw_triangle_lines(
+        &mut self,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        x3: f32,
+        y3: f32,
+        thickness: f32,
+        color: Color,
+    ) {
+        self.draw_poly_line_miter(&[
+            Vector2::new(x1, y1),
+            Vector2::new(x2, y2),
+            Vector2::new(x3, y3),
+        ], thickness, color, true);
     }
 
     pub fn draw_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, color: Color) {
@@ -258,6 +270,7 @@ impl DrawState {
         }
     }
 
+    #[allow(unused)]
     pub fn draw_polygon_concave(&mut self, points: &[Vector2<f32>], color: Color) {
         if points.len() < 3 {
             return;
@@ -287,9 +300,10 @@ impl DrawState {
                     continue;
                 }
                 // Another vertex inside the triangle: not an ear
-                if idx.iter().any(|&j| {
-                    j != ia && j != ib && j != ic && point_in_tri(points[j], a, b, c)
-                }) {
+                if idx
+                    .iter()
+                    .any(|&j| j != ia && j != ib && j != ic && point_in_tri(points[j], a, b, c))
+                {
                     continue;
                 }
 
@@ -307,6 +321,94 @@ impl DrawState {
         if idx.len() == 3 {
             let (a, b, c) = (points[idx[0]], points[idx[1]], points[idx[2]]);
             self.draw_triangle(a.x, a.y, b.x, b.y, c.x, c.y, color);
+        }
+    }
+
+    #[allow(unused)]
+    pub fn draw_poly_line_miter(
+        &mut self,
+        points: &[Vector2<f32>],
+        thickness: f32,
+        color: Color,
+        closed: bool,
+    ) {
+        // Drop consecutive duplicates (they break direction math)
+        let mut pts: Vec<Vector2<f32>> = Vec::with_capacity(points.len());
+        for &p in points {
+            if pts.last().map_or(true, |&q| q.distance2(p) > 1e-12) {
+                pts.push(p);
+            }
+        }
+        if closed && pts.len() > 1 && pts[0].distance2(*pts.last().unwrap()) < 1e-12 {
+            pts.pop();
+        }
+
+        let n = pts.len();
+        if n < 2 {
+            return;
+        }
+
+        let half = thickness / 2.0;
+        const MITER_LIMIT: f32 = 4.0; // max miter length / half-thickness
+
+        // Left-hand normal of a segment direction
+        let normal = |d: Vector2<f32>| Vector2::new(-d.y, d.x);
+        let dir = |a: Vector2<f32>, b: Vector2<f32>| (b - a).normalize();
+
+        // For each point, compute the left and right offset vertices
+        let mut left: Vec<Vector2<f32>> = Vec::with_capacity(n);
+        let mut right: Vec<Vector2<f32>> = Vec::with_capacity(n);
+
+        for i in 0..n {
+            let has_prev = closed || i > 0;
+            let has_next = closed || i < n - 1;
+
+            let d_prev = if has_prev {
+                Some(dir(pts[(i + n - 1) % n], pts[i]))
+            } else {
+                None
+            };
+            let d_next = if has_next {
+                Some(dir(pts[i], pts[(i + 1) % n]))
+            } else {
+                None
+            };
+
+            let offset = match (d_prev, d_next) {
+                (Some(p), Some(q)) => {
+                    let n1 = normal(p);
+                    let n2 = normal(q);
+                    let m = n1 + n2;
+                    let m_len2 = m.magnitude2();
+                    // Nearly 180° reversal: fall back to bevel-ish normal
+                    if m_len2 < 1e-6 {
+                        n2 * half
+                    } else {
+                        let m = m / m_len2.sqrt();
+                        let cos_half = m.dot(n1); // cos of half the turn angle
+                        let miter_len = half / cos_half.max(1e-4);
+                        if miter_len / half > MITER_LIMIT {
+                            // Too sharp: clamp the miter length
+                            m * (half * MITER_LIMIT)
+                        } else {
+                            m * miter_len
+                        }
+                    }
+                }
+                (Some(d), None) | (None, Some(d)) => normal(d) * half,
+                (None, None) => return,
+            };
+
+            left.push(pts[i] + offset);
+            right.push(pts[i] - offset);
+        }
+
+        let segs = if closed { n } else { n - 1 };
+        for i in 0..segs {
+            let j = (i + 1) % n;
+            let (l0, r0, l1, r1) = (left[i], right[i], left[j], right[j]);
+            self.draw_triangle(l0.x, l0.y, r0.x, r0.y, l1.x, l1.y, color);
+            self.draw_triangle(r0.x, r0.y, r1.x, r1.y, l1.x, l1.y, color);
         }
     }
 }

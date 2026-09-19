@@ -1,3 +1,4 @@
+#![allow(unused)]
 use cgmath::Vector2;
 
 pub fn cross(a: Vector2<f32>, b: Vector2<f32>, c: Vector2<f32>) -> f32 {

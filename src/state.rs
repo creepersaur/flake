@@ -7,7 +7,6 @@ use crate::input::{keyboard::KeyboardState, mouse::MouseState};
 use crate::model::instance::InstanceRaw;
 use crate::model::texture;
 use crate::model::vertex::Vertex;
-use crate::shapes::Shape;
 use crate::shapes::color::Color;
 use cgmath::Vector2;
 use cgmath::prelude::*;
@@ -370,14 +369,28 @@ impl State {
             self.draw_state.clear();
             self.draw_state
                 .draw_triangle(200.0, 450.0, 400.0, 150.0, 600.0, 450.0, Color::RED);
+            self.draw_state.draw_triangle_lines(
+                200.0,
+                450.0,
+                400.0,
+                150.0,
+                600.0,
+                450.0,
+                5.0,
+                Color::BLACK,
+            );
 
             self.draw_state
                 .draw_rectangle(50.0, 50.0, 50.0, 50.0, Color::BLACK);
+            self.draw_state
+                .draw_rectangle_lines(50.0, 50.0, 50.0, 50.0, 4.0, Color::WHITE);
+
+            self.draw_state.draw_circle(75.0, 75.0, 50.0, Color::RED);
+            self.draw_state.draw_circle_lines(75.0, 75.0, 50.0, 4.0, Color::BLUE);
 
             self.draw_state.draw_circle(50.0, 200.0, 10.0, Color::RED);
             self.draw_state
                 .draw_line(50.0, 200.0, 100.0, 100.0, 5.0, Color::BLUE);
-
 
             self.draw_state.draw_polygon(
                 &[
@@ -396,7 +409,7 @@ impl State {
                     Vector2::new(200.0, 200.0),
                     Vector2::new(50.0, 300.0),
                 ],
-                5.0,
+                10.0,
                 Color::MAGENTA,
                 true,
                 true,
@@ -409,19 +422,6 @@ impl State {
             &self.camera_buffer,
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
-        );
-    }
-
-    fn draw_shape_instances(&mut self, pass: &mut RenderPass, shape: Shape) {
-        if self.draw_state.is_shape_queue_empty(shape) {
-            return;
-        }
-
-        let instance_count = self.draw_state.set_shape_buffers(&self.device, pass, shape);
-        pass.draw_indexed(
-            0..self.draw_state.get_shape_indices(shape),
-            0,
-            0..instance_count as _,
         );
     }
 
@@ -454,6 +454,8 @@ impl State {
             });
 
         {
+            self.draw_state.upload(&self.device, &self.queue);
+
             let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
@@ -484,9 +486,7 @@ impl State {
             pass.set_pipeline(&self.render_pipeline);
             pass.set_bind_group(0, &self.camera_bind_group, &[]);
 
-            self.draw_shape_instances(&mut pass, Shape::Rectangle);
-            self.draw_shape_instances(&mut pass, Shape::Circle);
-            self.draw_shape_instances(&mut pass, Shape::Triangle);
+            self.draw_state.draw(&mut pass);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

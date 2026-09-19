@@ -42,6 +42,7 @@ impl MouseState {
         self.position = new_pos;
     }
 
+    #[allow(unused)]
     pub fn get_position(&self) -> Vector2<f32> {
         self.position
     }
