@@ -8,6 +8,7 @@ use cgmath::num_traits::real::Real;
 use cgmath::{InnerSpace, MetricSpace, Quaternion, Rotation, Rotation3, Vector2, Vector3, Zero};
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, BufferUsages, Device, IndexFormat, RenderPass, util};
+use crate::shapes::polygon::{cross, point_in_tri};
 
 #[derive(Clone, Debug)]
 pub struct DrawState {
@@ -246,20 +247,66 @@ impl DrawState {
         }
     }
 
-    pub fn draw_polygon(&mut self, points: &[Vector2<f32>], color: Color) {
-        let mut i = 0;
-        let len = points.len();
-
-        while i < len {
-            let (a, b, c) = (
-                points[i % len],
-                points[(i + 1) % len],
-                points[(i + 2) % len],
-            );
-
+    pub fn draw_polygon_convex(&mut self, points: &[Vector2<f32>], color: Color) {
+        if points.len() < 3 {
+            return;
+        }
+        let a = points[0];
+        for win in points[1..].windows(2) {
+            let (b, c) = (win[0], win[1]);
             self.draw_triangle(a.x, a.y, b.x, b.y, c.x, c.y, color);
+        }
+    }
 
-            i += 1;
+    pub fn draw_polygon_concave(&mut self, points: &[Vector2<f32>], color: Color) {
+        if points.len() < 3 {
+            return;
+        }
+
+        // Signed area: >0 means counter-clockwise
+        let area: f32 = (0..points.len())
+            .map(|i| {
+                let (a, b) = (points[i], points[(i + 1) % points.len()]);
+                a.x * b.y - b.x * a.y
+            })
+            .sum();
+        let sign = if area >= 0.0 { 1.0 } else { -1.0 };
+
+        let mut idx: Vec<usize> = (0..points.len()).collect();
+
+        while idx.len() > 3 {
+            let n = idx.len();
+            let mut clipped = false;
+
+            for i in 0..n {
+                let (ia, ib, ic) = (idx[(i + n - 1) % n], idx[i], idx[(i + 1) % n]);
+                let (a, b, c) = (points[ia], points[ib], points[ic]);
+
+                // Reflex vertex: not an ear
+                if cross(a, b, c) * sign <= 0.0 {
+                    continue;
+                }
+                // Another vertex inside the triangle: not an ear
+                if idx.iter().any(|&j| {
+                    j != ia && j != ib && j != ic && point_in_tri(points[j], a, b, c)
+                }) {
+                    continue;
+                }
+
+                self.draw_triangle(a.x, a.y, b.x, b.y, c.x, c.y, color);
+                idx.remove(i);
+                clipped = true;
+                break;
+            }
+
+            if !clipped {
+                break; // degenerate or self-intersecting polygon
+            }
+        }
+
+        if idx.len() == 3 {
+            let (a, b, c) = (points[idx[0]], points[idx[1]], points[idx[2]]);
+            self.draw_triangle(a.x, a.y, b.x, b.y, c.x, c.y, color);
         }
     }
 }

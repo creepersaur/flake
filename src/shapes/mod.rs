@@ -2,6 +2,7 @@ pub mod rectangle;
 pub mod color;
 pub mod circle;
 pub mod triangle;
+pub mod polygon;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
