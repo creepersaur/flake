@@ -201,7 +201,7 @@ impl DrawState {
         let b = Vector2::new(x2, y2);
         let delta = b - a;
         let angle_radians = delta.y.atan2(delta.x);
-        let perp_angle = angle_radians + std::f32::consts::FRAC_PI_2;;
+        let perp_angle = angle_radians + std::f32::consts::FRAC_PI_2;
 
         let half_thickness = thickness / 2.0;
         let offset_x = perp_angle.cos() * half_thickness;
@@ -217,7 +217,14 @@ impl DrawState {
         );
     }
 
-    pub fn draw_poly_line(&mut self, points: &[Vector2<f32>], thickness: f32, color: Color, closed: bool, rounded: bool) {
+    pub fn draw_poly_line(
+        &mut self,
+        points: &[Vector2<f32>],
+        thickness: f32,
+        color: Color,
+        closed: bool,
+        rounded: bool,
+    ) {
         for win in points.windows(2) {
             let (a, b) = (win[0], win[1]);
 
@@ -227,12 +234,32 @@ impl DrawState {
             self.draw_line(a.x, a.y, b.x, b.y, thickness, color);
         }
 
-        if closed && let Some(a) = points.first() && let Some(b) = points.last() {
+        if closed
+            && let Some(a) = points.first()
+            && let Some(b) = points.last()
+        {
             self.draw_line(a.x, a.y, b.x, b.y, thickness, color);
         }
 
         if rounded && let Some(a) = points.last() {
             self.draw_circle(a.x, a.y, thickness, color);
+        }
+    }
+
+    pub fn draw_polygon(&mut self, points: &[Vector2<f32>], color: Color) {
+        let mut i = 0;
+        let len = points.len();
+
+        while i < len {
+            let (a, b, c) = (
+                points[i % len],
+                points[(i + 1) % len],
+                points[(i + 2) % len],
+            );
+
+            self.draw_triangle(a.x, a.y, b.x, b.y, c.x, c.y, color);
+
+            i += 1;
         }
     }
 }
