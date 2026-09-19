@@ -247,7 +247,7 @@ impl DrawState {
         }
     }
 
-    pub fn draw_polygon_convex(&mut self, points: &[Vector2<f32>], color: Color) {
+    pub fn draw_polygon(&mut self, points: &[Vector2<f32>], color: Color) {
         if points.len() < 3 {
             return;
         }

@@ -379,12 +379,12 @@ impl State {
                 .draw_line(50.0, 200.0, 100.0, 100.0, 5.0, Color::BLUE);
 
 
-            self.draw_state.draw_polygon_convex(
+            self.draw_state.draw_polygon(
                 &[
-                    Vector2::new(300.0, 300.0),
-                    Vector2::new(400.0, 300.0),
-                    Vector2::new(400.0, 400.0),
-                    Vector2::new(300.0, 400.0),
+                    Vector2::new(100.0, 100.0),
+                    Vector2::new(150.0, 100.0),
+                    Vector2::new(200.0, 200.0),
+                    Vector2::new(50.0, 300.0),
                 ],
                 Color::BLACK,
             );
