@@ -31,7 +31,9 @@ pub struct State {
     // Pipeline
     render_pipeline: RenderPipeline,
     depth_texture: texture::Texture,
+    msaa_view: TextureView,
 
+    // Draw State
     draw_state: DrawState,
 
     // Camera
@@ -68,6 +70,9 @@ impl State {
         let render_pipeline =
             Self::get_render_pipeline(&device, &config, &camera_bind_group_layout);
 
+        /// # ANTI-ALIASING (MSAA)
+        let msaa_view = Self::create_msaa_view(&device, &config);
+
         Ok(Self {
             draw_state: DrawState::new(&device),
 
@@ -80,6 +85,7 @@ impl State {
 
             render_pipeline,
             depth_texture,
+            msaa_view,
 
             camera,
             camera_uniform,
@@ -90,6 +96,25 @@ impl State {
             keyboard_state: KeyboardState::default(),
             mouse_state: MouseState::default(),
         })
+    }
+
+    fn create_msaa_view(device: &Device, config: &SurfaceConfiguration) -> TextureView {
+        device
+            .create_texture(&TextureDescriptor {
+                label: Some("msaa"),
+                size: Extent3d {
+                    width: config.width,
+                    height: config.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 4,
+                dimension: TextureDimension::D2,
+                format: config.format,
+                usage: TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            })
+            .create_view(&Default::default())
     }
 
     #[allow(unused)]
@@ -323,7 +348,11 @@ impl State {
                 bias: DepthBiasState::default(),
             }),
 
-            multisample: MultisampleState::default(),
+            multisample: MultisampleState {
+                count: 4,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
             multiview_mask: None,
             cache: None,
         })
@@ -337,6 +366,8 @@ impl State {
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
         self.is_surface_configured = true;
+
+        self.msaa_view = Self::create_msaa_view(&self.device, &self.config);
         self.depth_texture =
             texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
 
@@ -386,7 +417,8 @@ impl State {
                 .draw_rectangle_lines(50.0, 50.0, 50.0, 50.0, 4.0, Color::WHITE);
 
             self.draw_state.draw_circle(75.0, 75.0, 50.0, Color::RED);
-            self.draw_state.draw_circle_lines(75.0, 75.0, 50.0, 4.0, Color::BLUE);
+            self.draw_state
+                .draw_circle_lines(75.0, 75.0, 50.0, 4.0, Color::BLUE);
 
             self.draw_state.draw_circle(50.0, 200.0, 10.0, Color::RED);
             self.draw_state
@@ -459,8 +491,8 @@ impl State {
             let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
+                    view: &self.msaa_view,
+                    resolve_target: Some(&view),
                     depth_slice: None,
                     ops: Operations {
                         load: LoadOp::Clear(wgpu::Color {
