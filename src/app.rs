@@ -6,17 +6,19 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Window, WindowId};
 
-pub struct Flake<F: FnMut()> {
+pub type Result = anyhow::Result<()>;
+
+pub struct App<F: FnMut()> {
     pub state: Option<State>,
     update_fn: F,
 }
 
-impl<F: FnMut()> Flake<F> {
+impl<F: FnMut()> App<F> {
     pub fn run(update_fn: F) -> anyhow::Result<()> {
         env_logger::init();
         let event_loop = EventLoop::with_user_event().build()?;
 
-        let mut app = Flake {
+        let mut app = App {
             state: None,
             update_fn,
         };
@@ -26,7 +28,7 @@ impl<F: FnMut()> Flake<F> {
     }
 }
 
-impl<F: FnMut()> ApplicationHandler<State> for Flake<F> {
+impl<F: FnMut()> ApplicationHandler<State> for App<F> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         #[allow(unused_mut)]
         let mut window_attributes = Window::default_attributes();
@@ -54,6 +56,10 @@ impl<F: FnMut()> ApplicationHandler<State> for Flake<F> {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
+                if !state.running {
+                    event_loop.exit()
+                }
+
                 state.update(&mut self.update_fn);
 
                 match state.render() {

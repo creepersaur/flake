@@ -26,6 +26,7 @@ use crate::global::STATE;
 
 pub struct State {
     // Window, Surface & Device
+    pub running: bool,
     window: Arc<Window>,
     surface: Surface<'static>,
     device: Device,
@@ -102,6 +103,7 @@ impl State {
             .build(&device, config.width, config.height, config.format);
 
         Ok(Self {
+            running: true,
             window,
             surface,
             device,
@@ -442,6 +444,10 @@ impl State {
         self.frames
     }
 
+    pub fn exit(&mut self) {
+        self.running = false;
+    }
+
     pub fn update(&mut self, update_fn: &mut impl FnMut()) {
         self.mouse_state
             .update_position(&self.window, &self.device_state);
@@ -520,7 +526,7 @@ impl State {
                 }),
                 ..Default::default()
             });
-            
+
             pass.set_pipeline(&self.render_pipeline);
             pass.set_bind_group(0, &self.camera_bind_group, &[]);
 

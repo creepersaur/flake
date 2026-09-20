@@ -1,6 +1,7 @@
 [package]
 name = "flake"
 version = "0.1.0"
+authors = ["creepersaur"]
 edition = "2024"
 
 [dependencies]
