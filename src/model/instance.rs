@@ -22,6 +22,11 @@ pub struct InstanceRaw {
 }
 
 impl Instance {
+    pub fn update_with_z_offset(&mut self, z_offset: f32) -> &mut Self {
+        self.position.z += z_offset;
+        self
+    }
+    
     pub fn to_raw(&self) -> InstanceRaw {
         InstanceRaw {
             model: (cgmath::Matrix4::from_translation(self.position)

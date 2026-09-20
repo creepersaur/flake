@@ -7,14 +7,38 @@ use crate::shapes::triangle::{TRI_INDICES, TRI_VERTICES};
 use crate::shapes::{Shape, ShapeBuffer};
 use cgmath::{InnerSpace, MetricSpace, One, Quaternion, Rotation3, Vector2, Vector3, Zero};
 use wgpu::{Device, Queue, RenderPass};
+use wgpu_text::TextBrush;
+use wgpu_text::glyph_brush::ab_glyph::FontRef;
+use wgpu_text::glyph_brush::{Section, Text};
+
+#[derive(Clone, Debug)]
+pub struct TextItem {
+    pub text: String,
+    pub pos: (f32, f32),
+    pub z: f32,
+    pub size: f32,
+    pub color: Color,
+}
+
+#[derive(Clone, Debug)]
+pub struct QueueItem {
+    shape: Shape,
+    instance: Instance,
+    z_offset: f32,
+}
 
 #[derive(Clone, Debug)]
 pub struct DrawState {
+    z_offset: f32,
     rect_buffer: ShapeBuffer,
     circle_buffer: ShapeBuffer,
     triangle_buffer: ShapeBuffer,
 
-    queue: Vec<(Shape, Instance)>,
+    queue: Vec<QueueItem>,
+    scratch: Vec<InstanceRaw>,
+
+    text_queue: Vec<TextItem>,
+    text_len: usize,
 }
 
 impl DrawState {
@@ -42,44 +66,96 @@ impl DrawState {
         );
 
         Self {
+            z_offset: 0.0,
             rect_buffer,
             circle_buffer,
             triangle_buffer,
 
-            queue: Default::default(),
+            queue: Vec::with_capacity(1024),
+            scratch: Vec::with_capacity(1024),
+
+            text_queue: Vec::with_capacity(128),
+            text_len: 0,
         }
     }
 
-    pub fn upload(&mut self, device: &Device, queue: &Queue) {
+    pub fn upload(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        text_brush: &mut TextBrush<FontRef>,
+    ) -> anyhow::Result<()> {
         for buf in [
             &mut self.rect_buffer,
             &mut self.circle_buffer,
             &mut self.triangle_buffer,
         ] {
-            let raw: Vec<InstanceRaw> = self
-                .queue
-                .iter()
-                .filter(|(s, _)| *s == buf.shape)
-                .map(|(_, i)| i.to_raw())
-                .collect();
-            buf.upload(device, queue, &raw);
+            self.scratch.clear();
+            self.scratch.extend(
+                self.queue
+                    .iter_mut()
+                    .filter(|queue_item| queue_item.shape == buf.shape)
+                    .map(|queue_item| {
+                        queue_item
+                            .instance
+                            .update_with_z_offset(queue_item.z_offset)
+                            .to_raw()
+                    }),
+            );
+            buf.upload(device, queue, &self.scratch);
         }
+
+        text_brush.queue(
+            device,
+            queue,
+            self.text_queue[..self.text_len].iter().map(|item| {
+                Section::default()
+                    .add_text(
+                        Text::new(&item.text)
+                            .with_scale(item.size)
+                            .with_color(item.color.to_array())
+                            .with_z(item.z),
+                    )
+                    .with_screen_position((item.pos.0, item.pos.1))
+            }),
+        )?;
+
+        Ok(())
     }
 
-    pub fn draw<'a>(&'a self, pass: &mut RenderPass<'a>) {
+    pub fn draw<'a>(&'a self, pass: &mut RenderPass<'a>, text_brush: &TextBrush<FontRef>) {
         self.rect_buffer.draw(pass);
         self.circle_buffer.draw(pass);
         self.triangle_buffer.draw(pass);
+
+        text_brush.draw(pass);
+    }
+
+    pub fn increment_z(&mut self) {
+        const EPSILON: f32 = 0.000016;
+        self.z_offset += EPSILON;
+    }
+
+    pub fn push_shape(&mut self, shape: Shape, instance: Instance) {
+        self.increment_z();
+        self.queue.push(QueueItem {
+            shape,
+            instance,
+            z_offset: self.z_offset,
+        })
     }
 }
 
 impl DrawState {
     pub fn clear(&mut self) {
         self.queue.clear();
+        self.text_len = 0;
+
+        self.z_offset = 0.0;
     }
 
     pub fn draw_rectangle(&mut self, x: f32, y: f32, w: f32, h: f32, color: Color) {
-        self.queue.push((
+        self.push_shape(
             Shape::Rectangle,
             Instance {
                 position: Vector3::new(x, y, 0.0),
@@ -89,7 +165,7 @@ impl DrawState {
                 shape: Shape::Rectangle,
                 tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()],
             },
-        ));
+        );
     }
 
     pub fn draw_rectangle_lines(
@@ -123,7 +199,7 @@ impl DrawState {
         rotation: f32,
         color: Color,
     ) {
-        self.queue.push((
+        self.push_shape(
             Shape::Rectangle,
             Instance {
                 position: Vector3::new(x, y, 0.0),
@@ -133,11 +209,27 @@ impl DrawState {
                 shape: Shape::Rectangle,
                 tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()],
             },
-        ));
+        );
+    }
+    pub fn draw_rectangle_lines_rotated(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        rotation: f32,
+        thickness: f32,
+        color: Color,
+    ) {
+        let (s, c) = rotation.sin_cos();
+        let rot = |dx: f32, dy: f32| Vector2::new(x + dx * c - dy * s, y + dx * s + dy * c);
+
+        let points = [rot(0.0, 0.0), rot(w, 0.0), rot(w, h), rot(0.0, h)];
+        self.draw_poly_line_miter(&points, thickness, color, true);
     }
 
     pub fn draw_circle(&mut self, x: f32, y: f32, r: f32, color: Color) {
-        self.queue.push((
+        self.push_shape(
             Shape::Circle,
             Instance {
                 position: Vector3::new(x, y, 0.0),
@@ -147,7 +239,7 @@ impl DrawState {
                 shape: Shape::Circle,
                 tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()],
             },
-        ));
+        );
     }
 
     pub fn draw_circle_lines(&mut self, x: f32, y: f32, r: f32, thickness: f32, color: Color) {
@@ -157,7 +249,7 @@ impl DrawState {
         let points: Vec<Vector2<f32>> = (0..segments)
             .map(|i| {
                 let a = i as f32 * step;
-                Vector2::new(x + r/2.0 * a.cos(), y + r/2.0 * a.sin())
+                Vector2::new(x + r / 2.0 * a.cos(), y + r / 2.0 * a.sin())
             })
             .collect();
 
@@ -174,7 +266,7 @@ impl DrawState {
         y3: f32,
         color: Color,
     ) {
-        self.queue.push((
+        self.push_shape(
             Shape::Triangle,
             Instance {
                 position: Vector3::new(0.0, 0.0, 0.0),
@@ -188,7 +280,7 @@ impl DrawState {
                     Vector2::new(x3, y3),
                 ],
             },
-        ));
+        );
     }
 
     pub fn draw_triangle_lines(
@@ -202,11 +294,16 @@ impl DrawState {
         thickness: f32,
         color: Color,
     ) {
-        self.draw_poly_line_miter(&[
-            Vector2::new(x1, y1),
-            Vector2::new(x2, y2),
-            Vector2::new(x3, y3),
-        ], thickness, color, true);
+        self.draw_poly_line_miter(
+            &[
+                Vector2::new(x1, y1),
+                Vector2::new(x2, y2),
+                Vector2::new(x3, y3),
+            ],
+            thickness,
+            color,
+            true,
+        );
     }
 
     pub fn draw_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, color: Color) {
@@ -410,5 +507,30 @@ impl DrawState {
             self.draw_triangle(l0.x, l0.y, r0.x, r0.y, l1.x, l1.y, color);
             self.draw_triangle(r0.x, r0.y, r1.x, r1.y, l1.x, l1.y, color);
         }
+    }
+
+    pub fn draw_text(&mut self, text: &str, x: f32, y: f32, size: f32, color: Color) {
+        self.increment_z();
+
+        if self.text_len < self.text_queue.len() {
+            let item = &mut self.text_queue[self.text_len];
+            item.text.clear();
+            item.text.push_str(text);
+            item.pos.0 = x;
+            item.pos.1 = y;
+            item.z = self.z_offset;
+            item.color = color;
+            item.size = size;
+        } else {
+            self.text_queue.push(TextItem {
+                text: text.to_owned(),
+                pos: (x, y),
+                z: self.z_offset,
+                size,
+                color,
+            });
+        }
+
+        self.text_len += 1;
     }
 }

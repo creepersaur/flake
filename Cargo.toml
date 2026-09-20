@@ -13,8 +13,16 @@ pollster = "0.3"
 bytemuck = { version = "1.24", features = [ "derive" ] }
 cgmath = "0.18"
 device_query = "2"
+wgpu_text = "30.0.0"
 
 [dependencies.image]
 version = "0.24"
 default-features = false
 features = ["png", "jpeg"]
+
+[profile.dev.package."*"]
+opt-level = 3
+debug = "line-tables-only"
+
+[profile.release]
+debug = true

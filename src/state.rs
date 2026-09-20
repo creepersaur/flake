@@ -1,4 +1,6 @@
 #![allow(unused_doc_comments)]
+
+use std::ptr::NonNull;
 use crate::camera::camera2d::Camera2D;
 use crate::camera::camera3d::Camera3D;
 use crate::camera::{Camera, CameraUniform};
@@ -7,17 +9,20 @@ use crate::input::{keyboard::KeyboardState, mouse::MouseState};
 use crate::model::instance::InstanceRaw;
 use crate::model::texture;
 use crate::model::vertex::Vertex;
-use crate::shapes::color::Color;
 use cgmath::Vector2;
 use cgmath::prelude::*;
 use device_query::DeviceState;
 use std::sync::Arc;
+use std::time::Instant;
 use wgpu::{self, util::DeviceExt, *};
+use wgpu_text::glyph_brush::ab_glyph::FontRef;
+use wgpu_text::{BrushBuilder, TextBrush};
 use winit::dpi::PhysicalSize;
 use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::Window;
+use crate::global::STATE;
 
 pub struct State {
     // Window, Surface & Device
@@ -34,7 +39,9 @@ pub struct State {
     msaa_view: TextureView,
 
     // Draw State
-    draw_state: DrawState,
+    pub clear_color: crate::shapes::color::Color,
+    pub draw_state: DrawState,
+    text_brush: TextBrush<FontRef<'static>>,
 
     // Camera
     camera: Camera2D,
@@ -42,10 +49,15 @@ pub struct State {
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
 
+    // Time
+    last_frame: Instant,
+    deltatime: f32,
+    frames: usize,
+
     // Input
     device_state: DeviceState,
-    keyboard_state: KeyboardState,
-    mouse_state: MouseState,
+    pub keyboard_state: KeyboardState,
+    pub mouse_state: MouseState,
 }
 
 impl State {
@@ -73,9 +85,23 @@ impl State {
         /// # ANTI-ALIASING (MSAA)
         let msaa_view = Self::create_msaa_view(&device, &config);
 
-        Ok(Self {
-            draw_state: DrawState::new(&device),
+        let draw_state = DrawState::new(&device);
+        let text_brush = BrushBuilder::using_font_bytes(include_bytes!("Jetbrains.ttf"))?
+            .with_multisample(MultisampleState {
+                count: 4,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            })
+            .with_depth_stencil(Some(DepthStencilState {
+                format: texture::Texture::DEPTH_FORMAT,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(CompareFunction::Always),
+                stencil: StencilState::default(),
+                bias: DepthBiasState::default(),
+            }))
+            .build(&device, config.width, config.height, config.format);
 
+        Ok(Self {
             window,
             surface,
             device,
@@ -87,10 +113,18 @@ impl State {
             depth_texture,
             msaa_view,
 
+            clear_color: crate::shapes::color::Color::BLACK,
+            draw_state,
+            text_brush,
+
             camera,
             camera_uniform,
             camera_buffer,
             camera_bind_group,
+
+            last_frame: Instant::now(),
+            deltatime: 0.0166,
+            frames: 0,
 
             device_state: DeviceState::new(),
             keyboard_state: KeyboardState::default(),
@@ -367,6 +401,11 @@ impl State {
         self.surface.configure(&self.device, &self.config);
         self.is_surface_configured = true;
 
+        self.text_brush.resize_view(
+            self.config.width as f32,
+            self.config.height as f32,
+            &self.queue,
+        );
         self.msaa_view = Self::create_msaa_view(&self.device, &self.config);
         self.depth_texture =
             texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
@@ -391,62 +430,31 @@ impl State {
         self.mouse_state.set_position(x, y);
     }
 
-    pub(crate) fn update(&mut self) {
+    pub fn get_fps(&self) -> f32 {
+        1.0 / self.deltatime
+    }
+
+    pub fn get_frame_time(&self) -> f32 {
+        self.deltatime
+    }
+
+    pub fn get_frames(&self) -> usize {
+        self.frames
+    }
+
+    pub fn update(&mut self, update_fn: &mut impl FnMut()) {
         self.mouse_state
             .update_position(&self.window, &self.device_state);
 
-        // Draw state
-        {
-            self.draw_state.clear();
-            self.draw_state
-                .draw_triangle(200.0, 450.0, 400.0, 150.0, 600.0, 450.0, Color::RED);
-            self.draw_state.draw_triangle_lines(
-                200.0,
-                450.0,
-                400.0,
-                150.0,
-                600.0,
-                450.0,
-                5.0,
-                Color::BLACK,
-            );
+        let now = Instant::now();
+        self.deltatime = (now - self.last_frame).as_secs_f32();
+        self.frames += 1;
 
-            self.draw_state
-                .draw_rectangle(50.0, 50.0, 50.0, 50.0, Color::BLACK);
-            self.draw_state
-                .draw_rectangle_lines(50.0, 50.0, 50.0, 50.0, 4.0, Color::WHITE);
-
-            self.draw_state.draw_circle(75.0, 75.0, 50.0, Color::RED);
-            self.draw_state
-                .draw_circle_lines(75.0, 75.0, 50.0, 4.0, Color::BLUE);
-
-            self.draw_state.draw_circle(50.0, 200.0, 10.0, Color::RED);
-            self.draw_state
-                .draw_line(50.0, 200.0, 100.0, 100.0, 5.0, Color::BLUE);
-
-            self.draw_state.draw_polygon(
-                &[
-                    Vector2::new(100.0, 100.0),
-                    Vector2::new(150.0, 100.0),
-                    Vector2::new(200.0, 200.0),
-                    Vector2::new(50.0, 300.0),
-                ],
-                Color::BLACK,
-            );
-
-            self.draw_state.draw_poly_line(
-                &[
-                    Vector2::new(100.0, 100.0),
-                    Vector2::new(150.0, 100.0),
-                    Vector2::new(200.0, 200.0),
-                    Vector2::new(50.0, 300.0),
-                ],
-                10.0,
-                Color::MAGENTA,
-                true,
-                true,
-            );
-        }
+        let ptr = NonNull::from(&mut *self);
+        STATE.set(Some(ptr));
+        self.draw_state.clear();
+        update_fn();
+        STATE.set(None);
 
         // Update camera uniform
         self.camera_uniform.update_view_proj(&self.camera);
@@ -455,6 +463,8 @@ impl State {
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
+
+        self.last_frame = now;
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {
@@ -486,7 +496,8 @@ impl State {
             });
 
         {
-            self.draw_state.upload(&self.device, &self.queue);
+            self.draw_state
+                .upload(&self.device, &self.queue, &mut self.text_brush)?;
 
             let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Render Pass"),
@@ -495,12 +506,7 @@ impl State {
                     resolve_target: Some(&view),
                     depth_slice: None,
                     ops: Operations {
-                        load: LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
+                        load: LoadOp::Clear(self.clear_color.to_wgpu()),
                         store: StoreOp::Store,
                     },
                 })],
@@ -514,11 +520,11 @@ impl State {
                 }),
                 ..Default::default()
             });
-
+            
             pass.set_pipeline(&self.render_pipeline);
             pass.set_bind_group(0, &self.camera_bind_group, &[]);
 
-            self.draw_state.draw(&mut pass);
+            self.draw_state.draw(&mut pass, &self.text_brush);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

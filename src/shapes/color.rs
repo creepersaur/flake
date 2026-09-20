@@ -29,10 +29,12 @@ impl Color {
     pub const TRANSPARENT: Self = Self::new(0.0, 0.0, 0.0, 0.0);
     pub const WHITE: Self = Self::new(1.0, 1.0, 1.0, 1.0);
     pub const BLACK: Self = Self::new(0.0, 0.0, 0.0, 1.0);
-    pub const RED: Self = Self::new(1.0, 0.0, 0.0, 1.0);
+    pub const RED: Self = Self::new(1.0, 0.03, 0.04, 1.0);
     pub const GREEN: Self = Self::new(0.0, 1.0, 0.0, 1.0);
-    pub const BLUE: Self = Self::new(0.0, 0.0, 1.0, 1.0);
-    pub const YELLOW: Self = Self::new(1.0, 1.0, 0.0, 1.0);
-    pub const MAGENTA: Self = Self::new(1.0, 0.0, 1.0, 1.0);
-    pub const CYAN: Self = Self::new(0.0, 1.0, 1.0, 1.0);
+    pub const BLUE: Self = Self::new(0.03, 0.04, 1.0, 1.0);
+    pub const YELLOW: Self = Self::new(1.0, 1.0, 0.03, 1.0);
+    pub const MAGENTA: Self = Self::new(1.0, 0.03, 1.0, 1.0);
+    pub const PURPLE: Self = Self::new(0.3,0.03, 1.0, 1.0);
+    pub const CYAN: Self = Self::new(0.03, 1.0, 1.0, 1.0);
+    pub const ORANGE: Self = Self::new(1.0, 0.3, 0.03, 1.0);
 }

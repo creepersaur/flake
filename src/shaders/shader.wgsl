@@ -54,7 +54,7 @@ fn vs_main(
             instance.tri_point_2,
             instance.tri_point_3,
         );
-        out.clip_position = camera.view_proj * model_matrix * vec4<f32>(tri_points[vertex_index], 0.0, 1.0);
+        out.clip_position = camera.view_proj * model_matrix * vec4<f32>(tri_points[vertex_index], model.position.z, 1.0);
     } else {
         out.clip_position = camera.view_proj * model_matrix * vec4<f32>(model.position, 1.0);
     }
@@ -68,7 +68,7 @@ fn vs_main(
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if in.shape == 1 {
         if length(in.uv - vec2(0.5, 0.5)) > 0.5 {
-            return vec4(0);
+            discard;
         }
     }
 
