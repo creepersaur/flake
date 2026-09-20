@@ -6,6 +6,8 @@ use crate::state::State;
 use cgmath::{Quaternion, Vector2, Vector3};
 use std::cell::Cell;
 use std::ptr::NonNull;
+use winit::event::MouseButton;
+use winit::keyboard::KeyCode;
 
 thread_local! {
     pub static STATE: Cell<Option<NonNull<State>>> = const { Cell::new(None) };
@@ -31,11 +33,29 @@ fn ctx<R>(f: impl FnOnce(&mut State) -> R) -> R {
 
 /// # Out-facing API
 
+/// ## TIME
+
+pub fn get_fps() -> f32 {
+    ctx(|s| s.get_fps())
+}
+pub fn get_frame_time() -> f32 {
+    ctx(|s| s.get_frame_time())
+}
+pub fn get_frames() -> usize {
+    ctx(|s| s.get_frames())
+}
+
+/// ## INPUT
+
 pub fn mouse_position() -> (f32, f32) {
     ctx(|s| s.mouse_state.get_position().into())
 }
-pub fn get_fps() -> f32 {
-    ctx(|s| s.get_fps())
+pub fn is_mouse_button_down(btn: MouseButton) -> bool {
+    ctx(|s| s.mouse_state.is_button_pressed(btn))
+}
+
+pub fn is_key_down(key: KeyCode) -> bool {
+    ctx(|s| s.keyboard_state.is_key_pressed(key))
 }
 
 /// ## DRAWING

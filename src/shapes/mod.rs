@@ -1,6 +1,6 @@
 use crate::model::instance::InstanceRaw;
-use wgpu::util::{BufferInitDescriptor, DeviceExt, RenderEncoder};
-use wgpu::{Buffer, BufferDescriptor, BufferUsages, Device, IndexFormat, Queue, RenderPass};
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu::{Buffer, BufferUsages, Device, IndexFormat, Queue, RenderPass};
 
 pub mod circle;
 pub mod color;
