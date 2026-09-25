@@ -2,17 +2,27 @@ use flake::prelude::*;
 
 fn main() -> flake::Result {
     let speed = 200.0;
-    let (mut x, mut y) = (0.0, 0.0);
+    let mut position = Vector2::new(390.0, 290.0);
+    let mut rot = 0.0;
 
     flake::run(|| {
-        clear_background(Color::RED);
+        clear_background(BLACK);
 
-        if is_key_down(KeyCode::KeyA) { x -= speed * get_frame_time(); }
-        if is_key_down(KeyCode::KeyD) { x += speed * get_frame_time(); }
-        if is_key_down(KeyCode::KeyW) { y -= speed * get_frame_time(); }
-        if is_key_down(KeyCode::KeyS) { y += speed * get_frame_time(); }
+        let dir = Vector2::new(
+            get_axis(KeyCode::KeyA, KeyCode::KeyD),
+            get_axis(KeyCode::KeyW, KeyCode::KeyS),
+        )
+        .normalize_or_zero();
 
-        draw_rectangle(x, y, 50.0, 50.0, Color::BLACK);
+        if is_mouse_button_released(MouseButton::Left) {
+            println!("Space clicked!")
+        }
+
+        position += dir * speed * get_frame_time();
+        draw_rectangle(position.x, position.y, 20.0, 20.0, RED);
+
+        draw_rectangle_lines_rotated(300.0, 200.0, 200.0, 200.0, rot, 5.0, GREEN);
+        rot += 0.1f32.to_radians();
 
         if is_key_down(KeyCode::Space) {
             flake_quit();

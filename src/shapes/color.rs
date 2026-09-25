@@ -25,16 +25,27 @@ impl Color {
             a: self.a as f64,
         }
     }
+}
 
-    pub const TRANSPARENT: Self = Self::new(0.0, 0.0, 0.0, 0.0);
-    pub const WHITE: Self = Self::new(1.0, 1.0, 1.0, 1.0);
-    pub const BLACK: Self = Self::new(0.0, 0.0, 0.0, 1.0);
-    pub const RED: Self = Self::new(1.0, 0.03, 0.04, 1.0);
-    pub const GREEN: Self = Self::new(0.0, 1.0, 0.0, 1.0);
-    pub const BLUE: Self = Self::new(0.03, 0.04, 1.0, 1.0);
-    pub const YELLOW: Self = Self::new(1.0, 1.0, 0.03, 1.0);
-    pub const MAGENTA: Self = Self::new(1.0, 0.03, 1.0, 1.0);
-    pub const PURPLE: Self = Self::new(0.3,0.03, 1.0, 1.0);
-    pub const CYAN: Self = Self::new(0.03, 1.0, 1.0, 1.0);
-    pub const ORANGE: Self = Self::new(1.0, 0.3, 0.03, 1.0);
+macro_rules! define_colors {
+    ($($name:ident = ($r:expr, $g:expr, $b:expr, $a:expr)),* $(,)?) => {
+        impl Color {
+            $(pub const $name: Self = Self::new($r, $g, $b, $a);)*
+        }
+        $(pub const $name: Color = Color::$name;)*
+    };
+}
+
+define_colors! {
+    TRANSPARENT = (0.0, 0.0, 0.0, 0.0),
+    WHITE       = (1.0, 1.0, 1.0, 1.0),
+    BLACK       = (0.0, 0.0, 0.0, 1.0),
+    RED         = (1.0, 0.03, 0.04, 1.0),
+    GREEN       = (0.0, 1.0, 0.0, 1.0),
+    BLUE        = (0.03, 0.04, 1.0, 1.0),
+    YELLOW      = (1.0, 1.0, 0.03, 1.0),
+    MAGENTA     = (1.0, 0.03, 1.0, 1.0),
+    PURPLE      = (0.3, 0.03, 1.0, 1.0),
+    CYAN        = (0.03, 1.0, 1.0, 1.0),
+    ORANGE      = (1.0, 0.3, 0.03, 1.0),
 }

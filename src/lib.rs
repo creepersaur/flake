@@ -14,6 +14,7 @@ mod model;
 mod shapes;
 mod state;
 mod global;
+mod misc;
 
 pub type Result = anyhow::Result<()>;
 

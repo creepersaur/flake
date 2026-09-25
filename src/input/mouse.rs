@@ -9,6 +9,8 @@ pub struct MouseState {
     position: Vector2<f32>,
     delta: Option<Vector2<f32>>,
     pressed_buttons: HashSet<MouseButton>,
+    just_pressed: HashSet<MouseButton>,
+    just_released: HashSet<MouseButton>,
 }
 
 impl MouseState {
@@ -17,19 +19,42 @@ impl MouseState {
             position: Vector2::zero(),
             delta: None,
             pressed_buttons: Default::default(),
+            just_pressed: Default::default(),
+            just_released: Default::default(),
         }
     }
 
     pub fn set_pressed_button(&mut self, button: MouseButton, is_pressed: bool) {
         match is_pressed {
-            true => self.pressed_buttons.insert(button),
-            false => self.pressed_buttons.remove(&button),
+            true => {
+                self.pressed_buttons.insert(button);
+                self.just_pressed.insert(button)
+            },
+            false => {
+                self.pressed_buttons.remove(&button);
+                self.just_released.insert(button)
+            },
         };
     }
 
     #[allow(unused)]
-    pub fn is_button_pressed(&self, button: MouseButton) -> bool {
+    pub fn is_button_down(&self, button: MouseButton) -> bool {
         self.pressed_buttons.contains(&button)
+    }
+
+    #[allow(unused)]
+    pub fn is_button_clicked(&self, button: MouseButton) -> bool {
+        self.just_pressed.contains(&button)
+    }
+
+    #[allow(unused)]
+    pub fn is_button_released(&self, button: MouseButton) -> bool {
+        self.just_released.contains(&button)
+    }
+
+    pub fn clear_just_pressed(&mut self) {
+        self.just_pressed.clear();
+        self.just_released.clear();
     }
 
     pub fn set_position(&mut self, x: f32, y: f32) {

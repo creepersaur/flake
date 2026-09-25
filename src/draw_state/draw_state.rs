@@ -199,15 +199,19 @@ impl DrawState {
         rotation: f32,
         color: Color,
     ) {
+        let (s, c) = rotation.sin_cos();
+        let (hw, hh) = (w * 0.5, h * 0.5);
+        let px = x + hw - (hw * c - hh * s);
+        let py = y + hh - (hw * s + hh * c);
         self.push_shape(
             Shape::Rectangle,
             Instance {
-                position: Vector3::new(x, y, 0.0),
+                position: Vector3::new(px, py, 0.0),
                 size: Vector2::new(w, h),
                 rotation: Quaternion::from_angle_z(cgmath::Rad(rotation)),
                 color,
                 shape: Shape::Rectangle,
-                tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()],
+                tri_points: [Vector2::zero(); 3],
             },
         );
     }
@@ -222,8 +226,11 @@ impl DrawState {
         color: Color,
     ) {
         let (s, c) = rotation.sin_cos();
-        let rot = |dx: f32, dy: f32| Vector2::new(x + dx * c - dy * s, y + dx * s + dy * c);
-
+        let (cx, cy) = (x + w * 0.5, y + h * 0.5);
+        let rot = |dx: f32, dy: f32| {
+            let (dx, dy) = (dx - w * 0.5, dy - h * 0.5);
+            Vector2::new(cx + dx * c - dy * s, cy + dx * s + dy * c)
+        };
         let points = [rot(0.0, 0.0), rot(w, 0.0), rot(w, h), rot(0.0, h)];
         self.draw_poly_line_miter(&points, thickness, color, true);
     }

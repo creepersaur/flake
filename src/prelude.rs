@@ -2,12 +2,12 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-use cgmath::Vector2;
+use crate::global::ctx;
+pub use crate::misc::math::*;
+pub use crate::shapes::color::*;
 pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
-use crate::global::ctx;
-pub use crate::shapes::color::Color;
-
+pub use crate::misc::rect::Rect;
 /// # Out-facing API
 
 /// Exits the running application, must be called while running.
@@ -15,10 +15,9 @@ pub use crate::shapes::color::Color;
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     flake_quit();
-/// })
+/// flake_quit();
 /// ```
+
 pub fn flake_quit() {
     ctx(|s| s.exit())
 }
@@ -30,10 +29,9 @@ pub fn flake_quit() {
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     println!("{}", get_fps());
-/// })
+/// println!("{}", get_fps());
 /// ```
+
 pub fn get_fps() -> f32 {
     ctx(|s| s.get_fps())
 }
@@ -43,10 +41,9 @@ pub fn get_fps() -> f32 {
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     println!("{}", get_frame_time());
-/// })
+/// println!("{}", get_frame_time());
 /// ```
+
 pub fn get_frame_time() -> f32 {
     ctx(|s| s.get_frame_time())
 }
@@ -56,10 +53,9 @@ pub fn get_frame_time() -> f32 {
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     println!("{}", get_frames());
-/// })
+/// println!("{}", get_frames());
 /// ```
+
 pub fn get_frames() -> usize {
     ctx(|s| s.get_frames())
 }
@@ -71,25 +67,23 @@ pub fn get_frames() -> usize {
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     let (mx, my) = mouse_position();
-/// })
+/// let (mx, my) = mouse_position();
 /// ```
+
 pub fn mouse_position() -> (f32, f32) {
     ctx(|s| s.mouse_state.get_position().into())
 }
 
-/// Returns the mouse x and y position in a `Vector2<f32>`.
+/// Returns the mouse x and y position in a `Vector2`.
 ///
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     let pos = mouse_position_vec2();
-///     println!("{}, {}", pos.x, pos.y);
-/// })
+/// let pos = mouse_position_vec2();
+/// println!("{}, {}", pos.x, pos.y);
 /// ```
-pub fn mouse_position_vec2() -> Vector2<f32> {
+
+pub fn mouse_position_vec2() -> Vector2 {
     ctx(|s| s.mouse_state.get_position())
 }
 
@@ -98,14 +92,41 @@ pub fn mouse_position_vec2() -> Vector2<f32> {
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     if is_mouse_button_down(MouseButton::Left) {
-///         println!("Left mouse button is being held");
-///     }
-/// })
+/// if is_mouse_button_down(MouseButton::Left) {
+///     println!("Left mouse button is being held");
+/// }
 /// ```
+
 pub fn is_mouse_button_down(btn: MouseButton) -> bool {
-    ctx(|s| s.mouse_state.is_button_pressed(btn))
+    ctx(|s| s.mouse_state.is_button_down(btn))
+}
+
+/// Checks if a `MouseButton` was just clicked this frame.
+///
+/// # Examples
+///
+/// ```
+/// if is_mouse_button_clicked(MouseButton::Left) {
+///     println!("User clicked left mouse button once");
+/// }
+/// ```
+
+pub fn is_mouse_button_clicked(btn: MouseButton) -> bool {
+    ctx(|s| s.mouse_state.is_button_clicked(btn))
+}
+
+/// Checks if a `MouseButton` was just released this frame.
+///
+/// # Examples
+///
+/// ```
+/// if is_mouse_button_released(MouseButton::Left) {
+///     println!("User let go of left mouse button once");
+/// }
+/// ```
+
+pub fn is_mouse_button_released(btn: MouseButton) -> bool {
+    ctx(|s| s.mouse_state.is_button_released(btn))
 }
 
 /// Checks if a key on the keyboard is being held.
@@ -113,12 +134,45 @@ pub fn is_mouse_button_down(btn: MouseButton) -> bool {
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     println!("is Space being held: {}", is_key_down(KeyCode::Space));
-/// })
+/// println!("is Space being held: {}", is_key_down(KeyCode::Space));
 /// ```
+
 pub fn is_key_down(key: KeyCode) -> bool {
-    ctx(|s| s.keyboard_state.is_key_pressed(key))
+    ctx(|s| s.keyboard_state.is_key_down(key))
+}
+
+/// Checks if a key on the keyboard was just clicked.
+///
+/// # Examples
+///
+/// ```
+/// if is_key_clicked(KeyCode::Space) {
+///     println!("User clicked Space once");
+/// }
+/// ```
+
+pub fn is_key_clicked(key: KeyCode) -> bool {
+    ctx(|s| s.keyboard_state.is_key_clicked(key))
+}
+/// Checks if a key on the keyboard was just released.
+///
+/// # Examples
+///
+/// ```
+/// if is_key_released(KeyCode::Space) {
+/// println!("User let go of Space once"); /// }
+/// ```
+
+pub fn is_key_released(key: KeyCode) -> bool {
+    ctx(|s| s.keyboard_state.is_key_released(key))
+}
+
+pub fn get_axis(left: KeyCode, right: KeyCode) -> f32 {
+    ctx(|s| match (is_key_down(left), is_key_down(right)) {
+        (true, false) => -1.0,
+        (false, true) => 1.0,
+        _ => 0.0,
+    })
 }
 
 /// ## DRAWING
@@ -128,10 +182,9 @@ pub fn is_key_down(key: KeyCode) -> bool {
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     clear_background(RED);
-/// })
+/// clear_background(RED);
 /// ```
+
 pub fn clear_background(c: Color) {
     ctx(|s| {
         s.clear_color = c;
@@ -144,12 +197,22 @@ pub fn clear_background(c: Color) {
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     draw_rectangle(100.0, 100.0, 50.0, 80.0, RED);
-/// })
+/// draw_rectangle(100.0, 100.0, 50.0, 80.0, RED);
 /// ```
+
 pub fn draw_rectangle(x: f32, y: f32, w: f32, h: f32, c: Color) {
     ctx(|s| s.draw_state.draw_rectangle(x, y, w, h, c));
+}
+
+/// Draws a filled rectangle using a `Rect`.
+///
+/// # Examples
+///
+/// ```
+/// draw_rectangle_from_rect(100.0, 100.0, 50.0, 80.0, RED);
+/// ```
+pub fn draw_rectangle_from_rect(rect: Rect, c: Color) {
+    draw_rectangle(rect.x, rect.y, rect.w, rect.h, c);
 }
 
 /// Draws the outline of a rectangle with its top-left corner at `(x, y)`.
@@ -157,23 +220,31 @@ pub fn draw_rectangle(x: f32, y: f32, w: f32, h: f32, c: Color) {
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     draw_rectangle_lines(100.0, 100.0, 50.0, 80.0, 4.0, WHITE);
-/// })
+/// draw_rectangle_lines(100.0, 100.0, 50.0, 80.0, 4.0, WHITE);
 /// ```
+
 pub fn draw_rectangle_lines(x: f32, y: f32, w: f32, h: f32, thickness: f32, c: Color) {
     ctx(|s| s.draw_state.draw_rectangle_lines(x, y, w, h, thickness, c));
 }
 
+/// Draws the outline of a rectangle using a `Rect`.
+///
+/// # Examples
+///
+/// ```
+/// draw_rectangle_lines_from_rect(100.0, 100.0, 50.0, 80.0, 4.0, WHITE);
+/// ```
+pub fn draw_rectangle_lines_from_rect(rect: Rect, thickness: f32, c: Color) {
+    draw_rectangle_lines(rect.x, rect.y, rect.w, rect.h, thickness, c);
+}
 /// Draws a filled rectangle rotated by `rotation` radians around `(x, y)`.
 ///
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     draw_rectangle_rotated(200.0, 200.0, 50.0, 80.0, std::f32::consts::FRAC_PI_4, GREEN);
-/// })
+/// draw_rectangle_rotated(200.0, 200.0, 50.0, 80.0, std::f32::consts::FRAC_PI_4, GREEN);
 /// ```
+
 pub fn draw_rectangle_rotated(x: f32, y: f32, w: f32, h: f32, rotation: f32, c: Color) {
     ctx(|s| s.draw_state.draw_rectangle_rotated(x, y, w, h, rotation, c));
 }
@@ -183,10 +254,9 @@ pub fn draw_rectangle_rotated(x: f32, y: f32, w: f32, h: f32, rotation: f32, c: 
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     draw_rectangle_lines_rotated(200.0, 200.0, 50.0, 80.0, 0.5, 3.0, WHITE);
-/// })
+/// draw_rectangle_lines_rotated(200.0, 200.0, 50.0, 80.0, 0.5, 3.0, WHITE);
 /// ```
+
 pub fn draw_rectangle_lines_rotated(
     x: f32,
     y: f32,
@@ -207,10 +277,9 @@ pub fn draw_rectangle_lines_rotated(
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     draw_circle(300.0, 300.0, 40.0, BLUE);
-/// })
+/// draw_circle(300.0, 300.0, 40.0, BLUE);
 /// ```
+
 pub fn draw_circle(x: f32, y: f32, r: f32, c: Color) {
     ctx(|s| s.draw_state.draw_circle(x, y, r, c));
 }
@@ -220,10 +289,9 @@ pub fn draw_circle(x: f32, y: f32, r: f32, c: Color) {
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     draw_circle_lines(300.0, 300.0, 40.0, 3.0, WHITE);
-/// })
+/// draw_circle_lines(300.0, 300.0, 40.0, 3.0, WHITE);
 /// ```
+
 pub fn draw_circle_lines(x: f32, y: f32, r: f32, thickness: f32, c: Color) {
     ctx(|s| s.draw_state.draw_circle_lines(x, y, r, thickness, c));
 }
@@ -233,10 +301,9 @@ pub fn draw_circle_lines(x: f32, y: f32, r: f32, thickness: f32, c: Color) {
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     draw_triangle(100.0, 200.0, 200.0, 200.0, 150.0, 100.0, YELLOW);
-/// })
+/// draw_triangle(100.0, 200.0, 200.0, 200.0, 150.0, 100.0, YELLOW);
 /// ```
+
 pub fn draw_triangle(x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32, color: Color) {
     ctx(|s| s.draw_state.draw_triangle(x1, y1, x2, y2, x3, y3, color));
 }
@@ -246,10 +313,9 @@ pub fn draw_triangle(x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32, color
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     draw_triangle_lines(100.0, 200.0, 200.0, 200.0, 150.0, 100.0, 3.0, WHITE);
-/// })
+/// draw_triangle_lines(100.0, 200.0, 200.0, 200.0, 150.0, 100.0, 3.0, WHITE);
 /// ```
+
 pub fn draw_triangle_lines(
     x1: f32,
     y1: f32,
@@ -271,10 +337,9 @@ pub fn draw_triangle_lines(
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     draw_line(0.0, 0.0, 200.0, 150.0, 4.0, WHITE);
-/// })
+/// draw_line(0.0, 0.0, 200.0, 150.0, 4.0, WHITE);
 /// ```
+
 pub fn draw_line(x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, color: Color) {
     ctx(|s| s.draw_state.draw_line(x1, y1, x2, y2, thickness, color))
 }
@@ -285,12 +350,11 @@ pub fn draw_line(x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, color: Colo
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     let pts = [Vector2::new(50.0, 50.0), Vector2::new(150.0, 80.0), Vector2::new(100.0, 160.0)];
-///     draw_poly_line(&pts, 3.0, WHITE, true);
-/// })
+/// let pts = [Vector2::new(50.0, 50.0), Vector2::new(150.0, 80.0), Vector2::new(100.0, 160.0)];
+/// draw_poly_line(&pts, 3.0, WHITE, true);
 /// ```
-pub fn draw_poly_line(points: &[Vector2<f32>], thickness: f32, color: Color, closed: bool) {
+
+pub fn draw_poly_line(points: &[Vector2], thickness: f32, color: Color, closed: bool) {
     ctx(|s| {
         s.draw_state
             .draw_poly_line_miter(points, thickness, color, closed)
@@ -303,12 +367,11 @@ pub fn draw_poly_line(points: &[Vector2<f32>], thickness: f32, color: Color, clo
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     let pts = [Vector2::new(50.0, 50.0), Vector2::new(150.0, 80.0), Vector2::new(100.0, 160.0)];
-///     draw_poly_line_rounded(&pts, 6.0, WHITE, false);
-/// })
+/// let pts = [Vector2::new(50.0, 50.0), Vector2::new(150.0, 80.0), Vector2::new(100.0, 160.0)];
+/// draw_poly_line_rounded(&pts, 6.0, WHITE, false);
 /// ```
-pub fn draw_poly_line_rounded(points: &[Vector2<f32>], thickness: f32, color: Color, closed: bool) {
+
+pub fn draw_poly_line_rounded(points: &[Vector2], thickness: f32, color: Color, closed: bool) {
     ctx(|s| {
         s.draw_state
             .draw_poly_line(points, thickness, color, closed, true)
@@ -321,13 +384,11 @@ pub fn draw_poly_line_rounded(points: &[Vector2<f32>], thickness: f32, color: Co
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     let pts = [Vector2::new(100.0, 100.0), Vector2::new(200.0, 100.0),
-///                Vector2::new(220.0, 180.0), Vector2::new(80.0, 180.0)];
-///     draw_polygon(&pts, GREEN);
-/// })
+/// let pts = [Vector2::new(100.0, 100.0), Vector2::new(200.0, 100.0),
+/// Vector2::new(220.0, 180.0), Vector2::new(80.0, 180.0)];/// draw_polygon(&pts, GREEN);
 /// ```
-pub fn draw_polygon(points: &[Vector2<f32>], thickness: f32, color: Color) {
+
+pub fn draw_polygon(points: &[Vector2], thickness: f32, color: Color) {
     ctx(|s| s.draw_state.draw_polygon(points, color))
 }
 
@@ -337,14 +398,12 @@ pub fn draw_polygon(points: &[Vector2<f32>], thickness: f32, color: Color) {
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     let pts = [Vector2::new(100.0, 100.0), Vector2::new(200.0, 100.0),
-///                Vector2::new(150.0, 150.0), Vector2::new(200.0, 200.0),
-///                Vector2::new(100.0, 200.0)];
-///     draw_polygon_concave(&pts, RED);
-/// })
+/// let pts = [Vector2::new(100.0, 100.0), Vector2::new(200.0, 100.0),
+/// Vector2::new(150.0, 150.0), Vector2::new(200.0, 200.0), /// Vector2::new(100.0, 200.0)];
+/// draw_polygon_concave(&pts, RED);
 /// ```
-pub fn draw_polygon_concave(points: &[Vector2<f32>], thickness: f32, color: Color) {
+
+pub fn draw_polygon_concave(points: &[Vector2], thickness: f32, color: Color) {
     ctx(|s| s.draw_state.draw_polygon_concave(points, color))
 }
 
@@ -353,10 +412,9 @@ pub fn draw_polygon_concave(points: &[Vector2<f32>], thickness: f32, color: Colo
 /// # Examples
 ///
 /// ```
-/// flake::run(|| {
-///     draw_text("Hello", 10.0, 10.0, 32.0, WHITE);
-/// })
+/// draw_text("Hello", 10.0, 10.0, 32.0, WHITE);
 /// ```
+
 pub fn draw_text(t: &str, x: f32, y: f32, size: f32, c: Color) {
     ctx(|s| s.draw_state.draw_text(t, x, y, size, c));
 }

@@ -1,10 +1,10 @@
 #![allow(unused_doc_comments)]
 
-use std::ptr::NonNull;
 use crate::camera::camera2d::Camera2D;
 use crate::camera::camera3d::Camera3D;
 use crate::camera::{Camera, CameraUniform};
 use crate::draw_state::draw_state::DrawState;
+use crate::global::STATE;
 use crate::input::{keyboard::KeyboardState, mouse::MouseState};
 use crate::model::instance::InstanceRaw;
 use crate::model::texture;
@@ -12,6 +12,7 @@ use crate::model::vertex::Vertex;
 use cgmath::Vector2;
 use cgmath::prelude::*;
 use device_query::DeviceState;
+use std::ptr::NonNull;
 use std::sync::Arc;
 use std::time::Instant;
 use wgpu::{self, util::DeviceExt, *};
@@ -22,7 +23,6 @@ use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::Window;
-use crate::global::STATE;
 
 pub struct State {
     // Window, Surface & Device
@@ -416,12 +416,8 @@ impl State {
         self.camera.height = height as f32;
     }
 
-    pub fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
+    pub fn handle_key(&mut self, _event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
         self.keyboard_state.set_key_pressed(code, is_pressed);
-
-        if let (KeyCode::Escape, true) = (code, is_pressed) {
-            event_loop.exit();
-        }
     }
 
     pub fn handle_mouse_button(&mut self, button: MouseButton, is_pressed: bool) {
@@ -471,6 +467,8 @@ impl State {
         );
 
         self.last_frame = now;
+        self.keyboard_state.clear_just_pressed();
+        self.mouse_state.clear_just_pressed();
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {

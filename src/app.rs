@@ -6,8 +6,6 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Window, WindowId};
 
-pub type Result = anyhow::Result<()>;
-
 pub struct App<F: FnMut()> {
     pub state: Option<State>,
     update_fn: F,
@@ -76,10 +74,15 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
                     KeyEvent {
                         physical_key: PhysicalKey::Code(code),
                         state: key_state,
+                        repeat,
                         ..
                     },
                 ..
-            } => state.handle_key(event_loop, code, key_state.is_pressed()),
+            } => {
+                if !repeat {
+                    state.handle_key(event_loop, code, key_state.is_pressed())
+                }
+            }
             WindowEvent::MouseInput {
                 button,
                 state: element_state,
