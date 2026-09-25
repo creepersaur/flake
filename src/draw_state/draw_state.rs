@@ -192,21 +192,28 @@ impl DrawState {
 
     pub fn draw_rectangle_rotated(
         &mut self,
-        x: f32,
-        y: f32,
+        mut x: f32,
+        mut y: f32,
         w: f32,
         h: f32,
         rotation: f32,
         color: Color,
     ) {
+        x -= w / 2.0;
+        y -= h / 2.0;
         let (s, c) = rotation.sin_cos();
-        let (hw, hh) = (w * 0.5, h * 0.5);
-        let px = x + hw - (hw * c - hh * s);
-        let py = y + hh - (hw * s + hh * c);
+        let cx = x + w / 2.0;
+        let cy = y + h / 2.0;
+
+        // offset from center to top-left, rotated
+        let (hx, hy) = (-w / 2.0, -h / 2.0);
+        let offset_x = hx * c - hy * s;
+        let offset_y = hx * s + hy * c;
+
         self.push_shape(
             Shape::Rectangle,
             Instance {
-                position: Vector3::new(px, py, 0.0),
+                position: Vector3::new(cx + offset_x, cy + offset_y, 0.0),
                 size: Vector2::new(w, h),
                 rotation: Quaternion::from_angle_z(cgmath::Rad(rotation)),
                 color,
@@ -318,15 +325,10 @@ impl DrawState {
         let b = Vector2::new(x2, y2);
         let delta = b - a;
         let angle_radians = delta.y.atan2(delta.x);
-        let perp_angle = angle_radians + std::f32::consts::FRAC_PI_2;
-
-        let half_thickness = thickness / 2.0;
-        let offset_x = perp_angle.cos() * half_thickness;
-        let offset_y = perp_angle.sin() * half_thickness;
 
         self.draw_rectangle_rotated(
-            x1 - offset_x,
-            y1 - offset_y,
+            (x1 + x2) / 2.0,
+            (y1 + y2) / 2.0,
             a.distance(b),
             thickness,
             angle_radians,
@@ -539,5 +541,33 @@ impl DrawState {
         }
 
         self.text_len += 1;
+    }
+
+    pub fn draw_arrow(
+        &mut self,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        thickness: f32,
+        head_size: f32,
+        color: Color,
+    ) {
+        self.draw_line(x1, y1, x2, y2, thickness, color);
+
+        let a = Vector2::new(x1, y1);
+        let b = Vector2::new(x2, y2);
+        let diff = (b - a).normalize() * head_size;
+        let diff_perp = Vector2::new(-diff.y, diff.x) / 1.5;
+
+        self.draw_triangle(
+            x2 - diff_perp.x,
+            y2 - diff_perp.y,
+            x2 + diff.x,
+            y2 + diff.y,
+            x2 + diff_perp.x,
+            y2 + diff_perp.y,
+            color,
+        );
     }
 }

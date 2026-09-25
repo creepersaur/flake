@@ -1,31 +1,17 @@
 use flake::prelude::*;
 
-fn main() -> flake::Result {
-    let speed = 200.0;
-    let mut position = Vector2::new(390.0, 290.0);
-    let mut rot = 0.0;
+fn main() -> FlakeResult {
+    const DIST: f32 = 50.0;
 
-    flake::run(|| {
-        clear_background(BLACK);
+    run! {
+        let mut p = Vector2::new(100.0, 100.0);
 
-        let dir = Vector2::new(
-            get_axis(KeyCode::KeyA, KeyCode::KeyD),
-            get_axis(KeyCode::KeyW, KeyCode::KeyS),
-        )
-        .normalize_or_zero();
+        for i in 0..10 {
+            let dir = (i as f32 * mouse_position().0).to_radians();
+            let new_point = Vector2::new(p.x + dir.cos() * DIST, p.y + dir.sin() * DIST);
+            draw_arrow(p.x, p.y, new_point.x, new_point.y, 5.0, 20.0, RED);
 
-        if is_mouse_button_released(MouseButton::Left) {
-            println!("Space clicked!")
+            p = new_point;
         }
-
-        position += dir * speed * get_frame_time();
-        draw_rectangle(position.x, position.y, 20.0, 20.0, RED);
-
-        draw_rectangle_lines_rotated(300.0, 200.0, 200.0, 200.0, rot, 5.0, GREEN);
-        rot += 0.1f32.to_radians();
-
-        if is_key_down(KeyCode::Space) {
-            flake_quit();
-        }
-    })
+    }
 }

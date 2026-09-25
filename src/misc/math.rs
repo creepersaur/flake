@@ -1,6 +1,6 @@
 #![allow(unused)]
-use cgmath::prelude::*;
-use std::ops::Neg;
+pub use cgmath::prelude::*;
+pub use std::ops::Neg;
 
 pub type Vector2 = cgmath::Vector2<f32>;
 pub type Vector3 = cgmath::Vector3<f32>;

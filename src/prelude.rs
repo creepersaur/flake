@@ -8,6 +8,7 @@ pub use crate::shapes::color::*;
 pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
 pub use crate::misc::rect::Rect;
+pub use crate::{run, FlakeResult};
 /// # Out-facing API
 
 /// Exits the running application, must be called while running.
@@ -417,4 +418,8 @@ pub fn draw_polygon_concave(points: &[Vector2], thickness: f32, color: Color) {
 
 pub fn draw_text(t: &str, x: f32, y: f32, size: f32, c: Color) {
     ctx(|s| s.draw_state.draw_text(t, x, y, size, c));
+}
+
+pub fn draw_arrow(x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, head_size: f32, c: Color) {
+    ctx(|s| s.draw_state.draw_arrow(x1, y1, x2, y2, thickness, head_size, c));
 }
