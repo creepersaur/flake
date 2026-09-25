@@ -14,11 +14,12 @@ fn with_global<R>(state: &mut State, f: impl FnOnce() -> R) -> R {
     r
 }
 
+#[inline(always)]
 pub fn ctx<R>(f: impl FnOnce(&mut State) -> R) -> R {
     STATE.with(|s| {
         let mut p = s
             .get()
-            .expect("no active context (call only inside the update fn)");
+            .expect("no active context (call only inside the run/update fn)");
         f(unsafe { p.as_mut() })
     })
 }
