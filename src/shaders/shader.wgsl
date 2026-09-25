@@ -67,9 +67,10 @@ fn vs_main(
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if in.shape == 1 {
-        if length(in.uv - vec2(0.5, 0.5)) > 0.5 {
-            discard;
-        }
+        let d = length(in.uv - vec2(0.5, 0.5));
+        let alpha = 1.0 - smoothstep(0.48, 0.5, d);
+        if alpha <= 0.0 { discard; }
+        return vec4(in.color.rgb, in.color.a * alpha);
     }
 
     return in.color;

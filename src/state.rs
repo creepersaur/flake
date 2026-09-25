@@ -91,7 +91,7 @@ impl State {
             .with_multisample(MultisampleState {
                 count: 4,
                 mask: !0,
-                alpha_to_coverage_enabled: false,
+                alpha_to_coverage_enabled: true,
             })
             .with_depth_stencil(Some(DepthStencilState {
                 format: texture::Texture::DEPTH_FORMAT,
