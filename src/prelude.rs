@@ -25,16 +25,39 @@ pub fn flake_quit() {
 
 /// ## TIME
 
-/// Gets the frames per second of the application based on time taken since last frame.
+/// Gets the frames per second of the application.
+/// (Limited by target framerate & fps cap). Uncap the FPS using `set_fps_capped(false)`.
 ///
 /// # Examples
 ///
 /// ```
 /// println!("{}", get_fps());
 /// ```
-
 pub fn get_fps() -> f32 {
     ctx(|s| s.get_fps())
+}
+
+/// Sets target FPS of the application (Uses screen refresh rate by default).
+///
+/// # Examples
+///
+/// ```
+/// set_target_fps(60);
+/// ```
+pub fn set_target_fps(fps: usize) {
+    ctx(|s| s.set_target_fps(fps))
+}
+
+/// Caps/unlocks the FPS of the application. (Capped by default)
+///
+/// # Examples
+///
+/// ```
+/// set_fps_capped(false); // uncaps the FPS
+/// set_fps_capped(true); // caps the FPS to target FPS
+/// ```
+pub fn set_fps_capped(capped: bool) {
+    ctx(|s| s.set_fps_capped(capped))
 }
 
 /// Gets the time taken since last frame in seconds.

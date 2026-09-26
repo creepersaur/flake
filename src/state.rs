@@ -52,6 +52,9 @@ pub struct State {
 
     // Time
     last_frame: Instant,
+    fps_cap: bool,
+    target_fps: f32,
+    raw_deltatime: f32,
     deltatime: f32,
     frames: usize,
 
@@ -64,6 +67,12 @@ pub struct State {
 impl State {
     pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
         let size = window.inner_size();
+        let target_fps = window
+            .current_monitor()
+            .and_then(|m| m.refresh_rate_millihertz())
+            .map(|mhz| mhz as f32 / 1000.0)
+            .unwrap_or(60.0);
+
         let (instance, surface) = Self::get_instance_and_surface(window.clone())?;
         let adapter = Self::get_adapter(&surface, &instance).await?;
         let (device, queue) = Self::get_device_and_queue(&adapter).await?;
@@ -124,8 +133,11 @@ impl State {
             camera_buffer,
             camera_bind_group,
 
+            target_fps,
+            fps_cap: true,
             last_frame: Instant::now(),
             deltatime: 0.0166,
+            raw_deltatime: 0.0166,
             frames: 0,
 
             device_state: DeviceState::new(),
@@ -428,6 +440,14 @@ impl State {
         self.mouse_state.set_position(x, y);
     }
 
+    pub fn set_target_fps(&mut self, fps: usize) {
+        self.target_fps = fps as f32;
+    }
+
+    pub fn set_fps_capped(&mut self, capped: bool) {
+        self.fps_cap = capped;
+    }
+
     pub fn get_fps(&self) -> f32 {
         1.0 / self.deltatime
     }
@@ -449,9 +469,26 @@ impl State {
             .update_position(&self.window, &self.device_state);
 
         let now = Instant::now();
-        self.deltatime = (now - self.last_frame).as_secs_f32();
         self.frames += 1;
+        
+        if self.fps_cap {
+            self.raw_deltatime = (now - self.last_frame).as_secs_f32();
+            
+            // Sleep to cap to target_fps if we're running faster than that
+            let target_frame_time = 1.0 / self.target_fps;
+            if self.raw_deltatime < target_frame_time {
+                let sleep_time = target_frame_time - self.raw_deltatime;
+                std::thread::sleep(std::time::Duration::from_secs_f32(sleep_time));
+            }
 
+            let paced_now = Instant::now();
+            self.deltatime = (paced_now - self.last_frame).as_secs_f32();
+            self.last_frame = paced_now;
+        } else {
+            self.deltatime = (now - self.last_frame).as_secs_f32();
+            self.last_frame = now;
+        }
+        
         let ptr = NonNull::from(&mut *self);
         STATE.set(Some(ptr));
         self.draw_state.clear();
@@ -466,7 +503,6 @@ impl State {
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
 
-        self.last_frame = now;
         self.keyboard_state.clear_just_pressed();
         self.mouse_state.clear_just_pressed();
     }
