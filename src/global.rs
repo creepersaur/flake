@@ -9,6 +9,8 @@ pub struct PendingConfig {
     pub window_y: Option<i32>,
     pub window_width: Option<u32>,
     pub window_height: Option<u32>,
+    pub window_visible: Option<bool>,
+    pub window_icon: Option<(Vec<u8>, u32, u32)>,
 }
 
 thread_local! {

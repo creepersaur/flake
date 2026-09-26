@@ -31,13 +31,19 @@ impl<F: FnMut()> App<F> {
 impl<F: FnMut()> ApplicationHandler<State> for App<F> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         #[allow(unused_mut)]
-        let mut window_attributes = Window::default_attributes();
+        let mut window_attributes = Window::default_attributes().with_visible(false);
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
         PENDING_CONFIG.with_borrow(|s| {
             s.window_title
                 .as_ref()
                 .and_then(|title| Some(window.set_title(title)));
+
+            if let Some((rgba, w, h)) = &s.window_icon {
+                if let Ok(icon) = winit::window::Icon::from_rgba(rgba.clone(), *w, *h) {
+                    window.set_window_icon(Some(icon));
+                }
+            }
 
             s.window_x.as_ref().and_then(|x| {
                 let pos = window.outer_position().unwrap_or_default();
@@ -60,6 +66,7 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
             });
         });
 
+        window.set_visible(true);
         self.state = Some(pollster::block_on(State::new(window)).unwrap());
     }
 

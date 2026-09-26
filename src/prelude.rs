@@ -2,7 +2,7 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-use crate::global::{ctx, PENDING_CONFIG, STATE};
+use crate::global::{PENDING_CONFIG, STATE, ctx};
 pub use crate::misc::math::*;
 pub use crate::misc::rect::Rect;
 pub use crate::shapes::color::*;
@@ -38,6 +38,44 @@ pub fn set_window_title(title: &str) {
     }
 
     PENDING_CONFIG.with_borrow_mut(|s| s.window_title = Some(title.into()));
+}
+
+/// Sets whether the window is visible or not.
+///
+/// # Examples
+///
+/// ```
+/// set_window_visible(false); // hides the window
+/// set_window_visible(true); // shows the window
+/// ```
+pub fn set_window_visible(visible: bool) {
+    if STATE.get().is_some() {
+        return ctx(|s| s.set_window_visible(visible));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.window_visible = Some(visible));
+}
+
+/// Sets the icon of the window.
+///
+/// # Examples
+///
+/// ```
+/// set_window_icon("path_to_icon");
+/// ```
+pub fn set_window_icon(path: &str) {
+    let img = image::open(path)
+        .expect("image icon does not exist at path")
+        .resize_exact(32, 32, image::imageops::FilterType::Lanczos3)
+        .into_rgba8();
+    let (width, height) = img.dimensions();
+    let rgba = img.into_raw();
+
+    if STATE.get().is_some() {
+        return ctx(|s| s.set_window_icon(rgba, width, height));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.window_icon = Some((rgba, width, height)));
 }
 
 /// Sets position X of the window.

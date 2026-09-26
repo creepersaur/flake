@@ -560,6 +560,16 @@ impl State {
         self.window.set_title(title);
     }
 
+    pub fn set_window_visible(&mut self, visible: bool) {
+        self.window.set_visible(visible);
+    }
+
+    pub fn set_window_icon(&mut self, rgba: Vec<u8>, width: u32, height: u32) {
+        if let Ok(icon) = winit::window::Icon::from_rgba(rgba, width, height) {
+            self.window.set_window_icon(Some(icon));
+        }
+    }
+
     pub fn set_window_position_x(&mut self, x: i32) {
         let current = self.window.outer_position().unwrap_or_default();
         self.window
