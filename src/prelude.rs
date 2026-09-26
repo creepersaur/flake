@@ -2,13 +2,13 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-use crate::global::ctx;
+use crate::global::{ctx, PENDING_CONFIG, STATE};
 pub use crate::misc::math::*;
+pub use crate::misc::rect::Rect;
 pub use crate::shapes::color::*;
+pub use crate::{FlakeResult, run};
 pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
-pub use crate::misc::rect::Rect;
-pub use crate::{run, FlakeResult};
 /// # Out-facing API
 
 /// Exits the running application, must be called while running.
@@ -23,7 +23,108 @@ pub fn flake_quit() {
     ctx(|s| s.exit())
 }
 
-/// ## TIME
+/// # Window
+
+/// Sets the title of the window.
+///
+/// # Examples
+///
+/// ```
+/// set_window_title("Hello");
+/// ```
+pub fn set_window_title(title: &str) {
+    if STATE.get().is_some() {
+        return ctx(|s| s.set_window_title(title));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.window_title = Some(title.into()));
+}
+
+/// Sets position X of the window.
+///
+/// # Examples
+///
+/// ```
+/// set_window_position_x(500);
+/// ```
+pub fn set_window_position_x(x: i32) {
+    if STATE.get().is_some() {
+        return ctx(|s| s.set_window_position_x(x));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.window_x = Some(x));
+}
+
+/// Sets position Y of the window.
+///
+/// # Examples
+///
+/// ```
+/// set_window_position_y(500);
+/// ```
+pub fn set_window_position_y(y: i32) {
+    if STATE.get().is_some() {
+        return ctx(|s| s.set_window_position_y(y));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.window_y = Some(y));
+}
+
+/// Sets position of the window.
+///
+/// # Examples
+///
+/// ```
+/// set_window_position(500, 500);
+/// ```
+pub fn set_window_position(x: i32, y: i32) {
+    set_window_position_x(x);
+    set_window_position_y(y);
+}
+
+/// Sets width of the window.
+///
+/// # Examples
+///
+/// ```
+/// set_window_width(500);
+/// ```
+pub fn set_window_width(w: u32) {
+    if STATE.get().is_some() {
+        return ctx(|s| s.set_window_width(w));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.window_width = Some(w));
+}
+
+/// Sets height of the window.
+///
+/// # Examples
+///
+/// ```
+/// set_window_height(500);
+/// ```
+pub fn set_window_height(h: u32) {
+    if STATE.get().is_some() {
+        return ctx(|s| s.set_window_height(h));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.window_height = Some(h));
+}
+
+/// Sets size of the window.
+///
+/// # Examples
+///
+/// ```
+/// set_window_size(500, 500);
+/// ```
+pub fn set_window_size(w: u32, h: u32) {
+    set_window_width(w);
+    set_window_height(h);
+}
+
+/// # TIME
 
 /// Gets the frames per second of the application.
 /// (Limited by target framerate & fps cap). Uncap the FPS using `set_fps_capped(false)`.
@@ -444,5 +545,8 @@ pub fn draw_text(t: &str, x: f32, y: f32, size: f32, c: Color) {
 }
 
 pub fn draw_arrow(x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, head_size: f32, c: Color) {
-    ctx(|s| s.draw_state.draw_arrow(x1, y1, x2, y2, thickness, head_size, c));
+    ctx(|s| {
+        s.draw_state
+            .draw_arrow(x1, y1, x2, y2, thickness, head_size, c)
+    });
 }

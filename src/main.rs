@@ -1,8 +1,10 @@
 use flake::prelude::*;
 
 fn main() -> FlakeResult {
-    run! {
-        set_fps_capped(false);
-        draw_text(&format!("FPS: {}", get_fps()), 0.0, 0.0, 16.0, WHITE);
-    }
+    set_window_title("Hello");
+    set_window_size(300, 300);
+
+    run!(RED => {
+
+    })
 }

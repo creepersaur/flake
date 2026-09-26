@@ -440,40 +440,16 @@ impl State {
         self.mouse_state.set_position(x, y);
     }
 
-    pub fn set_target_fps(&mut self, fps: usize) {
-        self.target_fps = fps as f32;
-    }
-
-    pub fn set_fps_capped(&mut self, capped: bool) {
-        self.fps_cap = capped;
-    }
-
-    pub fn get_fps(&self) -> f32 {
-        1.0 / self.deltatime
-    }
-
-    pub fn get_frame_time(&self) -> f32 {
-        self.deltatime
-    }
-
-    pub fn get_frames(&self) -> usize {
-        self.frames
-    }
-
-    pub fn exit(&mut self) {
-        self.running = false;
-    }
-
     pub fn update(&mut self, update_fn: &mut impl FnMut()) {
         self.mouse_state
             .update_position(&self.window, &self.device_state);
 
         let now = Instant::now();
         self.frames += 1;
-        
+
         if self.fps_cap {
             self.raw_deltatime = (now - self.last_frame).as_secs_f32();
-            
+
             // Sleep to cap to target_fps if we're running faster than that
             let target_frame_time = 1.0 / self.target_fps;
             if self.raw_deltatime < target_frame_time {
@@ -488,7 +464,7 @@ impl State {
             self.deltatime = (now - self.last_frame).as_secs_f32();
             self.last_frame = now;
         }
-        
+
         let ptr = NonNull::from(&mut *self);
         STATE.set(Some(ptr));
         self.draw_state.clear();
@@ -571,5 +547,61 @@ impl State {
         self.queue.present(output);
 
         Ok(())
+    }
+}
+
+impl State {
+    pub fn exit(&mut self) {
+        self.running = false;
+    }
+
+    /// ## Window
+    pub fn set_window_title(&mut self, title: &str) {
+        self.window.set_title(title);
+    }
+
+    pub fn set_window_position_x(&mut self, x: i32) {
+        let current = self.window.outer_position().unwrap_or_default();
+        self.window
+            .set_outer_position(winit::dpi::PhysicalPosition::new(x, current.y));
+    }
+
+    pub fn set_window_position_y(&mut self, y: i32) {
+        let current = self.window.outer_position().unwrap_or_default();
+        self.window
+            .set_outer_position(winit::dpi::PhysicalPosition::new(current.x, y));
+    }
+
+    pub fn set_window_width(&mut self, w: u32) {
+        let _ = self
+            .window
+            .request_inner_size(PhysicalSize::new(w, self.window.outer_size().height));
+    }
+
+    pub fn set_window_height(&mut self, h: u32) {
+        let _ = self
+            .window
+            .request_inner_size(PhysicalSize::new(self.window.outer_size().width, h));
+    }
+
+    /// ## TIME
+    pub fn set_target_fps(&mut self, fps: usize) {
+        self.target_fps = fps as f32;
+    }
+
+    pub fn set_fps_capped(&mut self, capped: bool) {
+        self.fps_cap = capped;
+    }
+
+    pub fn get_fps(&self) -> f32 {
+        1.0 / self.deltatime
+    }
+
+    pub fn get_frame_time(&self) -> f32 {
+        self.deltatime
+    }
+
+    pub fn get_frames(&self) -> usize {
+        self.frames
     }
 }

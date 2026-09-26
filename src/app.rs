@@ -1,6 +1,8 @@
+use crate::global::PENDING_CONFIG;
 use crate::state::State;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::PhysicalKey;
@@ -31,6 +33,32 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
         #[allow(unused_mut)]
         let mut window_attributes = Window::default_attributes();
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
+
+        PENDING_CONFIG.with_borrow(|s| {
+            s.window_title
+                .as_ref()
+                .and_then(|title| Some(window.set_title(title)));
+
+            s.window_x.as_ref().and_then(|x| {
+                let pos = window.outer_position().unwrap_or_default();
+                Some(window.set_outer_position(PhysicalPosition::new(*x, pos.y)))
+            });
+
+            s.window_y.as_ref().and_then(|y| {
+                let pos = window.outer_position().unwrap_or_default();
+                Some(window.set_outer_position(PhysicalPosition::new(pos.x, *y)))
+            });
+
+            s.window_width.as_ref().and_then(|w| {
+                let size = window.outer_size();
+                Some(window.request_inner_size(PhysicalSize::new(*w, size.height)))
+            });
+
+            s.window_height.as_ref().and_then(|h| {
+                let size = window.outer_size();
+                Some(window.request_inner_size(PhysicalSize::new(size.width, *h)))
+            });
+        });
 
         self.state = Some(pollster::block_on(State::new(window)).unwrap());
     }

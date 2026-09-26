@@ -1,9 +1,19 @@
 use crate::state::State;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::ptr::NonNull;
+
+#[derive(Default, Clone)]
+pub struct PendingConfig {
+    pub window_title: Option<String>,
+    pub window_x: Option<i32>,
+    pub window_y: Option<i32>,
+    pub window_width: Option<u32>,
+    pub window_height: Option<u32>,
+}
 
 thread_local! {
     pub static STATE: Cell<Option<NonNull<State>>> = const { Cell::new(None) };
+    pub static PENDING_CONFIG: RefCell<PendingConfig> = RefCell::new(PendingConfig::default());
 }
 
 #[allow(unused)]

@@ -26,4 +26,9 @@ opt-level = 3
 debug = "line-tables-only"
 
 [profile.release]
-debug = true
+opt-level = 3          # Maximum optimizations for speed (default is 3)
+lto = true             # Enable Link Time Optimization across the entire crate
+codegen-units = 1      # Reduce number of codegen units to 1 for better optimizations (disables parallel codegen for this profile)
+panic = "abort"        # Remove unwinding logic to reduce binary size and improve performance
+debug=false
+strip = true           # Strip debug symbols and symbols/relocations from binary (optional, for smaller size)
