@@ -2,10 +2,11 @@ use crate::global::PENDING_CONFIG;
 use crate::state::State;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
+use winit::dpi::PhysicalSize;
 use winit::event::{KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::PhysicalKey;
-use winit::window::{Window, WindowId};
+use winit::window::{Icon, Window, WindowId};
 
 pub struct App<F: FnMut()> {
     pub state: Option<State>,
@@ -35,29 +36,38 @@ impl<F: FnMut()> App<F> {
 
 impl<F: FnMut()> ApplicationHandler<State> for App<F> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        #[allow(unused_mut)]
-        let mut window_attributes = Window::default_attributes()
-            .with_title("Flake App")
+        if self.state.is_some() {
+            return;
+        }
+
+        let cfg = PENDING_CONFIG.with_borrow(|s| s.clone());
+
+        let default_icon = || {
+            let img = image::load_from_memory(include_bytes!("flake_icon.png"))
+                .unwrap()
+                .into_rgba8();
+            let (w, h) = img.dimensions();
+            (img.into_raw(), w, h)
+        };
+
+        let (icon_data, icon_w, icon_h) = cfg.window_icon.unwrap_or_else(default_icon);
+        let icon = Icon::from_rgba(icon_data, icon_w, icon_h).ok();
+
+        let window_attributes = Window::default_attributes()
+            .with_title(cfg.window_title.unwrap_or("Flake App".into()))
+            .with_window_icon(icon)
+            .with_inner_size(PhysicalSize::new(
+                cfg.window_width.unwrap_or(800),
+                cfg.window_height.unwrap_or(600),
+            ))
             .with_visible(false);
+
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
         self.state = Some(pollster::block_on(State::new(window.clone())).unwrap());
 
         PENDING_CONFIG.with_borrow(|s| {
-            s.window_title
-                .as_ref()
-                .and_then(|title| Some(window.set_title(title)));
-
-            if let Some((rgba, w, h)) = &s.window_icon {
-                if let Ok(icon) = winit::window::Icon::from_rgba(rgba.clone(), *w, *h) {
-                    window.set_window_icon(Some(icon));
-                }
-            }
-
             self.set_state_prop(s.window_x, |value, state| state.set_window_x(*value));
             self.set_state_prop(s.window_y, |value, state| state.set_window_y(*value));
-
-            self.set_state_prop(s.window_width, |value, state| state.set_window_w(*value));
-            self.set_state_prop(s.window_height, |value, state| state.set_window_h(*value));
 
             self.set_state_prop(s.fps_capped, |value, state| state.set_fps_capped(*value));
             self.set_state_prop(s.target_fps, |value, state| state.set_target_fps(*value));
