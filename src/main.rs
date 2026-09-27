@@ -1,10 +1,9 @@
 use flake::prelude::*;
 
 fn main() -> FlakeResult {
-    set_window_title("Hello");
-    set_window_size(300, 300);
-    set_window_icon("src/cupcake.png");
+    set_fps_capped(false);
 
-    run!(RED => {
-    })
+    run! {
+        draw_text(&format!("FPS: {}", get_fps()), 0.0, 0.0, 16.0, WHITE);
+    }
 }

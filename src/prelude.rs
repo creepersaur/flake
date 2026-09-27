@@ -66,7 +66,20 @@ pub fn set_window_visible(visible: bool) {
 pub fn set_window_icon(path: &str) {
     let img = image::open(path)
         .expect("image icon does not exist at path")
-        .resize_exact(32, 32, image::imageops::FilterType::Lanczos3)
+        .into_rgba8();
+    let (width, height) = img.dimensions();
+    let rgba = img.into_raw();
+
+    if STATE.get().is_some() {
+        return ctx(|s| s.set_window_icon(rgba, width, height));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.window_icon = Some((rgba, width, height)));
+}
+
+pub fn set_window_icon_bytes(bytes: &[u8]) {
+    let img = image::load_from_memory(bytes)
+        .expect("image icon does not exist at path")
         .into_rgba8();
     let (width, height) = img.dimensions();
     let rgba = img.into_raw();
@@ -83,11 +96,11 @@ pub fn set_window_icon(path: &str) {
 /// # Examples
 ///
 /// ```
-/// set_window_position_x(500);
+/// set_window_x(500);
 /// ```
-pub fn set_window_position_x(x: i32) {
+pub fn set_window_x(x: i32) {
     if STATE.get().is_some() {
-        return ctx(|s| s.set_window_position_x(x));
+        return ctx(|s| s.set_window_x(x));
     }
 
     PENDING_CONFIG.with_borrow_mut(|s| s.window_x = Some(x));
@@ -98,11 +111,11 @@ pub fn set_window_position_x(x: i32) {
 /// # Examples
 ///
 /// ```
-/// set_window_position_y(500);
+/// set_window_y(500);
 /// ```
-pub fn set_window_position_y(y: i32) {
+pub fn set_window_y(y: i32) {
     if STATE.get().is_some() {
-        return ctx(|s| s.set_window_position_y(y));
+        return ctx(|s| s.set_window_y(y));
     }
 
     PENDING_CONFIG.with_borrow_mut(|s| s.window_y = Some(y));
@@ -116,8 +129,8 @@ pub fn set_window_position_y(y: i32) {
 /// set_window_position(500, 500);
 /// ```
 pub fn set_window_position(x: i32, y: i32) {
-    set_window_position_x(x);
-    set_window_position_y(y);
+    set_window_x(x);
+    set_window_y(y);
 }
 
 /// Sets width of the window.
@@ -129,7 +142,7 @@ pub fn set_window_position(x: i32, y: i32) {
 /// ```
 pub fn set_window_width(w: u32) {
     if STATE.get().is_some() {
-        return ctx(|s| s.set_window_width(w));
+        return ctx(|s| s.set_window_w(w));
     }
 
     PENDING_CONFIG.with_borrow_mut(|s| s.window_width = Some(w));
@@ -144,7 +157,7 @@ pub fn set_window_width(w: u32) {
 /// ```
 pub fn set_window_height(h: u32) {
     if STATE.get().is_some() {
-        return ctx(|s| s.set_window_height(h));
+        return ctx(|s| s.set_window_h(h));
     }
 
     PENDING_CONFIG.with_borrow_mut(|s| s.window_height = Some(h));
@@ -184,7 +197,11 @@ pub fn get_fps() -> f32 {
 /// set_target_fps(60);
 /// ```
 pub fn set_target_fps(fps: usize) {
-    ctx(|s| s.set_target_fps(fps))
+    if STATE.get().is_some() {
+        return ctx(|s| s.set_target_fps(fps));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.target_fps = Some(fps));
 }
 
 /// Caps/unlocks the FPS of the application. (Capped by default)
@@ -196,7 +213,11 @@ pub fn set_target_fps(fps: usize) {
 /// set_fps_capped(true); // caps the FPS to target FPS
 /// ```
 pub fn set_fps_capped(capped: bool) {
-    ctx(|s| s.set_fps_capped(capped))
+    if STATE.get().is_some() {
+        return ctx(|s| s.set_fps_capped(capped));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.fps_capped = Some(capped));
 }
 
 /// Gets the time taken since last frame in seconds.

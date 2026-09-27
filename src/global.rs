@@ -11,6 +11,9 @@ pub struct PendingConfig {
     pub window_height: Option<u32>,
     pub window_visible: Option<bool>,
     pub window_icon: Option<(Vec<u8>, u32, u32)>,
+
+    pub fps_capped: Option<bool>,
+    pub target_fps: Option<usize>,
 }
 
 thread_local! {

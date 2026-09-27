@@ -570,25 +570,25 @@ impl State {
         }
     }
 
-    pub fn set_window_position_x(&mut self, x: i32) {
+    pub fn set_window_x(&mut self, x: i32) {
         let current = self.window.outer_position().unwrap_or_default();
         self.window
             .set_outer_position(winit::dpi::PhysicalPosition::new(x, current.y));
     }
 
-    pub fn set_window_position_y(&mut self, y: i32) {
+    pub fn set_window_y(&mut self, y: i32) {
         let current = self.window.outer_position().unwrap_or_default();
         self.window
             .set_outer_position(winit::dpi::PhysicalPosition::new(current.x, y));
     }
 
-    pub fn set_window_width(&mut self, w: u32) {
+    pub fn set_window_w(&mut self, w: u32) {
         let _ = self
             .window
             .request_inner_size(PhysicalSize::new(w, self.window.outer_size().height));
     }
 
-    pub fn set_window_height(&mut self, h: u32) {
+    pub fn set_window_h(&mut self, h: u32) {
         let _ = self
             .window
             .request_inner_size(PhysicalSize::new(self.window.outer_size().width, h));

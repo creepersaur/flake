@@ -2,7 +2,6 @@ use crate::global::PENDING_CONFIG;
 use crate::state::State;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
-use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::PhysicalKey;
@@ -26,13 +25,22 @@ impl<F: FnMut()> App<F> {
 
         Ok(())
     }
+
+    fn set_state_prop<T>(&mut self, value: Option<T>, f: impl Fn(&T, &mut State)) {
+        value
+            .as_ref()
+            .and_then(|a| Some(f(a, self.state.as_mut().unwrap())));
+    }
 }
 
 impl<F: FnMut()> ApplicationHandler<State> for App<F> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         #[allow(unused_mut)]
-        let mut window_attributes = Window::default_attributes().with_visible(false);
+        let mut window_attributes = Window::default_attributes()
+            .with_title("Flake App")
+            .with_visible(false);
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
+        self.state = Some(pollster::block_on(State::new(window.clone())).unwrap());
 
         PENDING_CONFIG.with_borrow(|s| {
             s.window_title
@@ -45,29 +53,17 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
                 }
             }
 
-            s.window_x.as_ref().and_then(|x| {
-                let pos = window.outer_position().unwrap_or_default();
-                Some(window.set_outer_position(PhysicalPosition::new(*x, pos.y)))
-            });
+            self.set_state_prop(s.window_x, |value, state| state.set_window_x(*value));
+            self.set_state_prop(s.window_y, |value, state| state.set_window_y(*value));
 
-            s.window_y.as_ref().and_then(|y| {
-                let pos = window.outer_position().unwrap_or_default();
-                Some(window.set_outer_position(PhysicalPosition::new(pos.x, *y)))
-            });
+            self.set_state_prop(s.window_width, |value, state| state.set_window_w(*value));
+            self.set_state_prop(s.window_height, |value, state| state.set_window_h(*value));
 
-            s.window_width.as_ref().and_then(|w| {
-                let size = window.outer_size();
-                Some(window.request_inner_size(PhysicalSize::new(*w, size.height)))
-            });
-
-            s.window_height.as_ref().and_then(|h| {
-                let size = window.outer_size();
-                Some(window.request_inner_size(PhysicalSize::new(size.width, *h)))
-            });
+            self.set_state_prop(s.fps_capped, |value, state| state.set_fps_capped(*value));
+            self.set_state_prop(s.target_fps, |value, state| state.set_target_fps(*value));
         });
 
         window.set_visible(true);
-        self.state = Some(pollster::block_on(State::new(window)).unwrap());
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: State) {
