@@ -1,4 +1,4 @@
-use crate::prelude::{draw_rectangle_from_rect, Color, Vector2, draw_rectangle_lines_from_rect};
+use crate::prelude::{Color, Vector2, draw_rectangle_from_rect, draw_rectangle_lines_from_rect};
 
 /// # Rect
 /// Contains the position (x, y) and size (width, height) of a rectangle.
@@ -98,28 +98,34 @@ impl Rect {
     }
 
     // --- Builders (non-mutating, return new Rect) ---
+    /// Get a new Rect with the specified x
     pub const fn with_x(&self, x: f32) -> Self {
         Self::new(x, self.y, self.w, self.h)
     }
+    /// Get a new Rect with the specified y
     pub const fn with_y(&self, y: f32) -> Self {
         Self::new(self.x, y, self.w, self.h)
     }
+    /// Get a new Rect with the specified w
     pub const fn with_w(&self, w: f32) -> Self {
         Self::new(self.x, self.y, w, self.h)
     }
+    /// Get a new Rect with the specified h
     pub const fn with_h(&self, h: f32) -> Self {
         Self::new(self.x, self.y, self.w, h)
     }
 
+    /// Get a new Rect with the specified position
     pub fn with_position(&self, pos: Vector2) -> Self {
         Self::new(pos.x, pos.y, self.w, self.h)
     }
 
+    /// Get a new Rect with the specified size
     pub fn with_size(&self, size: Vector2) -> Self {
         Self::new(self.x, self.y, size.x, size.y)
     }
 
-    /// Move the rect by an offset
+    /// Get a moved Rect by an offset
     pub fn translated(&self, offset: Vector2) -> Self {
         Self::new(self.x + offset.x, self.y + offset.y, self.w, self.h)
     }
