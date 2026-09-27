@@ -29,14 +29,3 @@ pub fn run_with_bg(color: Color, mut update_fn: impl FnMut()) -> anyhow::Result<
         update_fn();
     })
 }
-
-#[macro_export]
-macro_rules! run {
-    ($color:expr => {$($tokens:tt)*}) => {
-        flake::run_with_bg($color, || { $($tokens)* })
-    };
-
-    {$($tokens:tt)*} => {
-        flake::run(|| { $($tokens)* })
-    };
-}

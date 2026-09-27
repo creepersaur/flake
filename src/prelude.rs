@@ -6,7 +6,7 @@ use crate::global::{PENDING_CONFIG, STATE, ctx};
 pub use crate::misc::math::*;
 pub use crate::misc::rect::Rect;
 pub use crate::shapes::color::*;
-pub use crate::{FlakeResult, run};
+pub use crate::FlakeResult;
 pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
 /// # Out-facing API
