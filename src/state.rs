@@ -22,7 +22,7 @@ use winit::dpi::PhysicalSize;
 use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
-use winit::window::Window;
+use winit::window::{Window, WindowLevel};
 
 pub struct State {
     // Window, Surface & Device
@@ -282,13 +282,27 @@ impl State {
             .copied()
             .unwrap_or(caps.formats[0]);
 
+        let alpha_mode = if caps
+            .alpha_modes
+            .contains(&CompositeAlphaMode::PostMultiplied)
+        {
+            CompositeAlphaMode::PostMultiplied
+        } else if caps
+            .alpha_modes
+            .contains(&CompositeAlphaMode::PreMultiplied)
+        {
+            CompositeAlphaMode::PreMultiplied
+        } else {
+            caps.alpha_modes[0] // fallback, transparency won't work
+        };
+
         SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT,
             format,
+            alpha_mode,
             width: size.width,
             height: size.height,
             present_mode: PresentMode::Immediate,
-            alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
             color_space: Default::default(),
@@ -556,6 +570,19 @@ impl State {
     }
 
     /// ## Window
+
+    pub fn get_window(&self) -> Arc<Window> {
+        self.window.clone()
+    }
+
+    pub fn set_mouse_passthrough(&self, passthrough: bool) {
+        self.window.set_cursor_hittest(passthrough).unwrap();
+    }
+    
+    pub fn set_window_level(&self, level: WindowLevel) {
+        self.window.set_window_level(level);
+    }
+
     pub fn set_window_title(&mut self, title: &str) {
         self.window.set_title(title);
     }
@@ -595,6 +622,7 @@ impl State {
     }
 
     /// ## TIME
+
     pub fn set_target_fps(&mut self, fps: usize) {
         self.target_fps = fps as f32;
     }

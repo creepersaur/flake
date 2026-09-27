@@ -1,12 +1,9 @@
 use flake::prelude::*;
 
 fn main() -> FlakeResult {
-    let mut rect = Rect::new(0.0, 0.0, 50.0, 50.0);
-    let speed = 50.0;
-
-    flake::run(|| {
-        rect.x += speed * get_frame_time();
-
+    let rect = Rect::new(0.0, 0.0, 50.0, 50.0);
+    flake::run_with_bg(TRANSPARENT, || {
         rect.draw(RED);
+        draw_circle(mouse_position().0, mouse_position().1, 20.0, WHITE);
     })
 }

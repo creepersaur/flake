@@ -2,13 +2,17 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+pub use crate::FlakeResult;
 use crate::global::{PENDING_CONFIG, STATE, ctx};
 pub use crate::misc::math::*;
 pub use crate::misc::rect::Rect;
 pub use crate::shapes::color::*;
-pub use crate::FlakeResult;
+use std::sync::Arc;
 pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
+use winit::window::Window;
+pub use winit::window::WindowLevel;
+
 /// # Out-facing API
 
 /// Exits the running application, must be called while running.
@@ -18,11 +22,54 @@ pub use winit::keyboard::KeyCode;
 /// ```
 /// flake_quit();
 /// ```
-
 pub fn flake_quit() {
     ctx(|s| s.exit())
 }
 
+/// Gets the winit window used by the application
+///
+/// # Examples
+///
+/// ```
+/// let win = get_window();
+/// win.set_transparent(true);
+/// ```
+pub fn get_window() -> Arc<Window> {
+    ctx(|s| s.get_window())
+}
+
+/// Sets whether window catches mouse events.
+pub fn set_mouse_passthrough(passthrough: bool) {
+    ctx(|s| s.set_mouse_passthrough(passthrough))
+}
+
+/// Sets whether the window is AlwaysOnTop, AlwaysOnBottom, or Normal
+pub fn set_window_level(level: WindowLevel) {
+    if STATE.get().is_some() {
+        return ctx(|s| s.set_window_level(level));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.window_level = Some(level));
+}
+
+/// Sets whether the window is transparent.
+/// **Run this before `flake::run()`** as it might not work after the window has been created.
+pub fn set_window_transparent(transparent: bool) {
+    if STATE.get().is_some() {
+        return get_window().set_transparent(transparent);
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.window_transparent = Some(transparent));
+}
+
+/// Sets whether the window decorations (titlebar, border, etc.) are enabled
+pub fn set_window_decorations(enabled: bool) {
+    if STATE.get().is_some() {
+        return get_window().set_decorations(enabled);
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.window_decorations = Some(enabled));
+}
 /// # Window
 
 /// Sets the title of the window.

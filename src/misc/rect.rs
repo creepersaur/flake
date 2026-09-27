@@ -1,4 +1,6 @@
-use crate::prelude::{Color, Vector2, draw_rectangle_from_rect, draw_rectangle_lines_from_rect};
+use crate::prelude::{
+    Color, Vector2, draw_rectangle_from_rect, draw_rectangle_lines_from_rect, mouse_position_vec2,
+};
 
 /// # Rect
 /// Contains the position (x, y) and size (width, height) of a rectangle.
@@ -202,14 +204,19 @@ impl Rect {
         )
     }
 
-    // Test if point (x, y) lies inside/on the Rect
+    /// Test if point (x, y) lies inside/on the Rect
     pub const fn contains_point(&self, x: f32, y: f32) -> bool {
         x >= self.x && y >= self.y && x <= self.x + self.w && y <= self.y + self.h
     }
 
-    // Test if point (`Vector2`) lies inside/on the Rect
+    /// Test if point (`Vector2`) lies inside/on the Rect
     pub const fn contains_point_vec2(&self, point: Vector2) -> bool {
         self.contains_point(point.x, point.y)
+    }
+
+    /// Test if mouse lies inside/on the Rect
+    pub fn contains_mouse(&self) -> bool {
+        self.contains_point_vec2(mouse_position_vec2())
     }
 
     /// AABB overlap test

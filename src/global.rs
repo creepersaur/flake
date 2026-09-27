@@ -1,6 +1,7 @@
 use crate::state::State;
 use std::cell::{Cell, RefCell};
 use std::ptr::NonNull;
+use winit::window::WindowLevel;
 
 #[derive(Default, Clone)]
 pub struct PendingConfig {
@@ -10,6 +11,10 @@ pub struct PendingConfig {
     pub window_width: Option<u32>,
     pub window_height: Option<u32>,
     pub window_visible: Option<bool>,
+    pub window_transparent: Option<bool>,
+    pub window_decorations: Option<bool>,
+    pub window_passthrough: Option<bool>,
+    pub window_level: Option<WindowLevel>,
     pub window_icon: Option<(Vec<u8>, u32, u32)>,
 
     pub fps_capped: Option<bool>,
