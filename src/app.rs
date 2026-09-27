@@ -55,7 +55,6 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
 
         let window_attributes = Window::default_attributes()
             .with_title(cfg.window_title.unwrap_or("Flake App".into()))
-            .with_transparent(cfg.window_transparent.unwrap_or(false))
             .with_decorations(cfg.window_decorations.unwrap_or(true))
             .with_window_icon(icon)
             .with_inner_size(PhysicalSize::new(
@@ -71,7 +70,7 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
         PENDING_CONFIG.with_borrow(|s| {
             self.set_state_prop(s.window_x, |value, state| state.set_window_x(*value));
             self.set_state_prop(s.window_y, |value, state| state.set_window_y(*value));
-            self.set_state_prop(s.window_passthrough, |value, state| state.set_mouse_passthrough(*value));
+            self.set_state_prop(s.window_passthrough, |value, state| state.set_window_passthrough(*value));
 
             self.set_state_prop(s.fps_capped, |value, state| state.set_fps_capped(*value));
             self.set_state_prop(s.target_fps, |value, state| state.set_target_fps(*value));

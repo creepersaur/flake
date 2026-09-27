@@ -28,7 +28,7 @@ impl KeyboardState {
     }
 
     #[allow(unused)]
-    pub fn is_key_clicked(&self, key_code: KeyCode) -> bool {
+    pub fn is_key_pressed(&self, key_code: KeyCode) -> bool {
         self.just_pressed.contains(&key_code)
     }
 

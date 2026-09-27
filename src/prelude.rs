@@ -39,8 +39,12 @@ pub fn get_window() -> Arc<Window> {
 }
 
 /// Sets whether window catches mouse events.
-pub fn set_mouse_passthrough(passthrough: bool) {
-    ctx(|s| s.set_mouse_passthrough(passthrough))
+pub fn set_window_passthrough(passthrough: bool) {
+    if STATE.get().is_some() {
+        return ctx(|s| s.set_window_passthrough(passthrough));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.window_passthrough = Some(passthrough));
 }
 
 /// Sets whether the window is AlwaysOnTop, AlwaysOnBottom, or Normal
@@ -180,6 +184,41 @@ pub fn set_window_position(x: i32, y: i32) {
     set_window_y(y);
 }
 
+/// Gets width of the window
+pub fn window_width() -> f32 {
+    ctx(|s| s.window_width())
+}
+
+/// Gets height of the window
+pub fn window_height() -> f32 {
+    ctx(|s| s.window_height())
+}
+
+/// Gets size of the window
+pub fn window_size() -> Vector2 {
+    ctx(|s| Vector2::new(s.window_width(), s.window_height()))
+}
+
+/// Gets position of the window
+pub fn window_position() -> (f32, f32) {
+    ctx(|s| s.window_position())
+}
+
+/// Gets position of the window as Vector2<f32>
+pub fn window_position_vec2() -> Vector2 {
+    ctx(|s| s.window_position().into())
+}
+
+/// Gets X position of the window
+pub fn window_x() -> f32 {
+    ctx(|s| s.window_x())
+}
+
+/// Gets Y position of the window
+pub fn window_y() -> f32 {
+    ctx(|s| s.window_y())
+}
+
 /// Sets width of the window.
 ///
 /// # Examples
@@ -293,19 +332,18 @@ pub fn get_frames() -> usize {
 
 /// ## INPUT
 
-/// Returns the mouse x and y position in a tuple.
+/// Returns the window-relative mouse x and y position in a tuple.
 ///
 /// # Examples
 ///
 /// ```
 /// let (mx, my) = mouse_position();
 /// ```
-
 pub fn mouse_position() -> (f32, f32) {
     ctx(|s| s.mouse_state.get_position().into())
 }
 
-/// Returns the mouse x and y position in a `Vector2`.
+/// Returns the window-relative mouse x and y position in a `Vector2`.
 ///
 /// # Examples
 ///
@@ -313,9 +351,22 @@ pub fn mouse_position() -> (f32, f32) {
 /// let pos = mouse_position_vec2();
 /// println!("{}, {}", pos.x, pos.y);
 /// ```
-
 pub fn mouse_position_vec2() -> Vector2 {
     ctx(|s| s.mouse_state.get_position())
+}
+
+/// Returns the mouse x and y position on the screen instead of window-relative as Vector2.
+pub fn mouse_screen_position_vec2() -> Vector2 {
+    ctx(|s| s.mouse_state.get_screen_position())
+}
+
+/// Returns the mouse x and y position on the screen instead of window-relative.
+pub fn mouse_screen_position() -> (f32, f32) {
+    ctx(|s| s.mouse_state.get_screen_position().into())
+}
+
+pub fn focus_window() {
+    get_window().focus_window();
 }
 
 /// Checks if a `MouseButton` is being held.
@@ -337,13 +388,12 @@ pub fn is_mouse_button_down(btn: MouseButton) -> bool {
 /// # Examples
 ///
 /// ```
-/// if is_mouse_button_clicked(MouseButton::Left) {
+/// if is_mouse_button_pressed(MouseButton::Left) {
 ///     println!("User clicked left mouse button once");
 /// }
 /// ```
-
-pub fn is_mouse_button_clicked(btn: MouseButton) -> bool {
-    ctx(|s| s.mouse_state.is_button_clicked(btn))
+pub fn is_mouse_button_pressed(btn: MouseButton) -> bool {
+    ctx(|s| s.mouse_state.is_button_pressed(btn))
 }
 
 /// Checks if a `MouseButton` was just released this frame.
@@ -377,13 +427,12 @@ pub fn is_key_down(key: KeyCode) -> bool {
 /// # Examples
 ///
 /// ```
-/// if is_key_clicked(KeyCode::Space) {
+/// if is_key_pressed(KeyCode::Space) {
 ///     println!("User clicked Space once");
 /// }
 /// ```
-
-pub fn is_key_clicked(key: KeyCode) -> bool {
-    ctx(|s| s.keyboard_state.is_key_clicked(key))
+pub fn is_key_pressed(key: KeyCode) -> bool {
+    ctx(|s| s.keyboard_state.is_key_pressed(key))
 }
 /// Checks if a key on the keyboard was just released.
 ///

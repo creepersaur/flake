@@ -6,6 +6,7 @@ use winit::window::Window;
 
 #[derive(Clone, PartialEq)]
 pub struct MouseState {
+    screen_position: Vector2<f32>,
     position: Vector2<f32>,
     delta: Option<Vector2<f32>>,
     pressed_buttons: HashSet<MouseButton>,
@@ -16,6 +17,7 @@ pub struct MouseState {
 impl MouseState {
     pub fn default() -> Self {
         Self {
+            screen_position: Vector2::zero(),
             position: Vector2::zero(),
             delta: None,
             pressed_buttons: Default::default(),
@@ -43,7 +45,7 @@ impl MouseState {
     }
 
     #[allow(unused)]
-    pub fn is_button_clicked(&self, button: MouseButton) -> bool {
+    pub fn is_button_pressed(&self, button: MouseButton) -> bool {
         self.just_pressed.contains(&button)
     }
 
@@ -73,13 +75,22 @@ impl MouseState {
         self.position
     }
 
+    #[allow(unused)]
+    #[inline(always)]
+    pub fn get_screen_position(&self) -> Vector2<f32> {
+        self.screen_position
+    }
+
     pub fn update_position(&mut self, window: &Window, device_state: &DeviceState) {
         if let Ok(inner_position) = window.inner_position() {
             let mouse = device_state.get_mouse();
+            
             self.set_position(
                 mouse.coords.0 as f32 - inner_position.x as f32,
                 mouse.coords.1 as f32 - inner_position.y as f32,
             );
+
+            self.screen_position = Vector2::new(mouse.coords.0 as f32, mouse.coords.1 as f32);
         }
     }
 }

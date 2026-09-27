@@ -575,10 +575,10 @@ impl State {
         self.window.clone()
     }
 
-    pub fn set_mouse_passthrough(&self, passthrough: bool) {
+    pub fn set_window_passthrough(&self, passthrough: bool) {
         self.window.set_cursor_hittest(passthrough).unwrap();
     }
-    
+
     pub fn set_window_level(&self, level: WindowLevel) {
         self.window.set_window_level(level);
     }
@@ -619,6 +619,26 @@ impl State {
         let _ = self
             .window
             .request_inner_size(PhysicalSize::new(self.window.outer_size().width, h));
+    }
+
+    pub fn window_width(&self) -> f32 {
+        self.window.inner_size().width as f32
+    }
+
+    pub fn window_height(&self) -> f32 {
+        self.window.inner_size().height as f32
+    }
+
+    pub fn window_position(&self) -> (f32, f32) {
+        self.window.outer_position().unwrap().into()
+    }
+
+    pub fn window_x(&self) -> f32 {
+        self.window.outer_position().unwrap().x as f32
+    }
+
+    pub fn window_y(&self) -> f32 {
+        self.window.outer_position().unwrap().y as f32
     }
 
     /// ## TIME

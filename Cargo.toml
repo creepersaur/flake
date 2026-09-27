@@ -15,6 +15,7 @@ bytemuck = { version = "1.24", features = [ "derive" ] }
 cgmath = "0.18"
 device_query = "2"
 wgpu_text = "30.0.0"
+rand = "0.10.3"
 
 [dependencies.image]
 version = "0.24"
