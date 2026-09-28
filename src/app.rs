@@ -75,6 +75,7 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
             self.set_state_prop(s.fps_capped, |value, state| state.set_fps_capped(*value));
             self.set_state_prop(s.target_fps, |value, state| state.set_target_fps(*value));
 
+            self.state.as_mut().unwrap().load_font_from_bytes(include_bytes!("Jetbrains.ttf"));
             for i in s.fonts.iter() {
                 self.state.as_mut().unwrap().load_font(i.clone());
             }

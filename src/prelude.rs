@@ -695,8 +695,8 @@ pub fn draw_polygon_concave(points: &[Vector2], thickness: f32, color: Color) {
 /// ```
 /// draw_text("Hello", 10.0, 10.0, 32.0, WHITE);
 /// ```
-pub fn draw_text(t: &str, x: f32, y: f32, size: f32, font: &Font, c: Color) {
-    ctx(|s| s.draw_state.draw_text(t, x, y, size, font, c));
+pub fn draw_text(t: &str, x: f32, y: f32, size: f32, font: Option<&Font>, c: Color) {
+    ctx(|s| s.draw_state.draw_text(&s.fonts, t, x, y, size, font, c));
 }
 
 /// Draws text with its top-left corner at `(x, y)` and the given font `size`.
@@ -713,9 +713,9 @@ pub fn load_ttf_font(path: &str) -> Font {
             s.fonts[s.fonts.len() - 1].clone()
         })
     }
-    
+
     PENDING_CONFIG.with_borrow_mut(|s| {
-        let font = Font::from_path(s.fonts.len(), path);
+        let font = Font::from_path(s.fonts.len() + 1, path);
         s.fonts.push(font.clone());
         font
     })

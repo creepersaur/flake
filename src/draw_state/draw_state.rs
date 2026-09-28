@@ -521,7 +521,7 @@ impl DrawState {
         }
     }
 
-    pub fn draw_text(&mut self, text: &str, x: f32, y: f32, size: f32, font: &Font, color: Color) {
+    pub fn draw_text(&mut self, fonts: &[Font], text: &str, x: f32, y: f32, size: f32, font: Option<&Font>, color: Color) {
         self.increment_z();
 
         if self.text_len < self.text_queue.len() {
@@ -536,7 +536,7 @@ impl DrawState {
         } else {
             self.text_queue.push(TextItem {
                 text: text.to_owned(),
-                font_id: font.id,
+                font_id: font.unwrap_or(&fonts[0]).id,
                 pos: (x, y),
                 z: self.z_offset,
                 size,

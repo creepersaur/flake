@@ -707,6 +707,13 @@ impl State {
         self.rebuild_text_brush();
     }
     
+    pub fn load_font_from_bytes(&mut self, bytes: &[u8]) {
+        let font = Font::from_bytes(self.fonts.len(), bytes);
+        self.fonts.push(font);
+
+        self.rebuild_text_brush();
+    }
+    
     pub fn load_font(&mut self, font: Font) {
         self.fonts.push(font);
 
