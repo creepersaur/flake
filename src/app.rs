@@ -74,6 +74,10 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
 
             self.set_state_prop(s.fps_capped, |value, state| state.set_fps_capped(*value));
             self.set_state_prop(s.target_fps, |value, state| state.set_target_fps(*value));
+
+            for i in s.fonts.iter() {
+                self.state.as_mut().unwrap().load_font(i.clone());
+            }
         });
 
         window.set_visible(true);

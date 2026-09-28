@@ -2,6 +2,7 @@ use crate::state::State;
 use std::cell::{Cell, RefCell};
 use std::ptr::NonNull;
 use winit::window::WindowLevel;
+use crate::misc::font::Font;
 
 #[derive(Default, Clone)]
 pub struct PendingConfig {
@@ -19,6 +20,8 @@ pub struct PendingConfig {
 
     pub fps_capped: Option<bool>,
     pub target_fps: Option<usize>,
+    
+    pub fonts: Vec<Font>,
 }
 
 thread_local! {

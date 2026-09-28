@@ -12,6 +12,7 @@ pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
 use winit::window::Window;
 pub use winit::window::WindowLevel;
+use crate::misc::font::Font;
 
 /// # Out-facing API
 
@@ -694,9 +695,30 @@ pub fn draw_polygon_concave(points: &[Vector2], thickness: f32, color: Color) {
 /// ```
 /// draw_text("Hello", 10.0, 10.0, 32.0, WHITE);
 /// ```
+pub fn draw_text(t: &str, x: f32, y: f32, size: f32, font: &Font, c: Color) {
+    ctx(|s| s.draw_state.draw_text(t, x, y, size, font, c));
+}
 
-pub fn draw_text(t: &str, x: f32, y: f32, size: f32, c: Color) {
-    ctx(|s| s.draw_state.draw_text(t, x, y, size, c));
+/// Draws text with its top-left corner at `(x, y)` and the given font `size`.
+///
+/// # Examples
+///
+/// ```
+/// draw_text("Hello", 10.0, 10.0, 32.0, WHITE);
+/// ```
+pub fn load_ttf_font(path: &str) -> Font {
+    if STATE.get().is_some() {
+        return ctx(|s| {
+            s.load_font_from_path(path);
+            s.fonts[s.fonts.len() - 1].clone()
+        })
+    }
+    
+    PENDING_CONFIG.with_borrow_mut(|s| {
+        let font = Font::from_path(s.fonts.len(), path);
+        s.fonts.push(font.clone());
+        font
+    })
 }
 
 pub fn draw_arrow(x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, head_size: f32, c: Color) {

@@ -1,11 +1,11 @@
 #![allow(unused_doc_comments)]
-
 use crate::camera::camera2d::Camera2D;
 use crate::camera::camera3d::Camera3D;
 use crate::camera::{Camera, CameraUniform};
 use crate::draw_state::draw_state::DrawState;
 use crate::global::STATE;
 use crate::input::{keyboard::KeyboardState, mouse::MouseState};
+use crate::misc::font::Font;
 use crate::model::instance::InstanceRaw;
 use crate::model::texture;
 use crate::model::vertex::Vertex;
@@ -16,7 +16,7 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 use std::time::Instant;
 use wgpu::{self, util::DeviceExt, *};
-use wgpu_text::glyph_brush::ab_glyph::FontRef;
+use wgpu_text::glyph_brush::ab_glyph::FontVec;
 use wgpu_text::{BrushBuilder, TextBrush};
 use winit::dpi::PhysicalSize;
 use winit::event::MouseButton;
@@ -42,7 +42,10 @@ pub struct State {
     // Draw State
     pub clear_color: crate::shapes::color::Color,
     pub draw_state: DrawState,
-    text_brush: TextBrush<FontRef<'static>>,
+
+    // Text
+    pub fonts: Vec<Font>,
+    text_brush: TextBrush<FontVec>,
 
     // Camera
     camera: Camera2D,
@@ -96,7 +99,7 @@ impl State {
         let msaa_view = Self::create_msaa_view(&device, &config);
 
         let draw_state = DrawState::new(&device);
-        let text_brush = BrushBuilder::using_font_bytes(include_bytes!("Jetbrains.ttf"))?
+        let text_brush_builder = BrushBuilder::using_fonts(vec![])
             .with_multisample(MultisampleState {
                 count: 4,
                 mask: !0,
@@ -108,8 +111,9 @@ impl State {
                 depth_compare: Some(CompareFunction::Always),
                 stencil: StencilState::default(),
                 bias: DepthBiasState::default(),
-            }))
-            .build(&device, config.width, config.height, config.format);
+            }));
+        let text_brush =
+            text_brush_builder.build(&device, config.width, config.height, config.format);
 
         Ok(Self {
             running: true,
@@ -126,6 +130,8 @@ impl State {
 
             clear_color: crate::shapes::color::Color::BLACK,
             draw_state,
+
+            fonts: vec![],
             text_brush,
 
             camera,
@@ -358,6 +364,35 @@ impl State {
         });
 
         (layout, bind_group)
+    }
+
+    fn rebuild_text_brush(&mut self) {
+        let fonts = self
+            .fonts
+            .iter()
+            .map(|s| FontVec::try_from_vec(s.data.to_vec()).expect("Invalid font data"))
+            .collect();
+
+        let text_brush_builder = BrushBuilder::using_fonts(fonts)
+            .with_multisample(MultisampleState {
+                count: 4,
+                mask: !0,
+                alpha_to_coverage_enabled: true,
+            })
+            .with_depth_stencil(Some(DepthStencilState {
+                format: texture::Texture::DEPTH_FORMAT,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(CompareFunction::Always),
+                stencil: StencilState::default(),
+                bias: DepthBiasState::default(),
+            }));
+
+        self.text_brush = text_brush_builder.build(
+            &self.device,
+            self.config.width,
+            self.config.height,
+            self.config.format,
+        );
     }
 
     fn get_render_pipeline(
@@ -661,5 +696,20 @@ impl State {
 
     pub fn get_frames(&self) -> usize {
         self.frames
+    }
+
+    /// ## FONT
+
+    pub fn load_font_from_path(&mut self, path: &str) {
+        let font = Font::from_path(self.fonts.len(), path);
+        self.fonts.push(font);
+
+        self.rebuild_text_brush();
+    }
+    
+    pub fn load_font(&mut self, font: Font) {
+        self.fonts.push(font);
+
+        self.rebuild_text_brush();
     }
 }

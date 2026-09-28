@@ -1,3 +1,4 @@
+use crate::misc::font::Font;
 use crate::model::instance::{Instance, InstanceRaw};
 use crate::shapes::circle::{CIRCLE_INDICES, CIRCLE_VERTICES};
 use crate::shapes::color::Color;
@@ -8,12 +9,13 @@ use crate::shapes::{Shape, ShapeBuffer};
 use cgmath::{InnerSpace, MetricSpace, One, Quaternion, Rotation3, Vector2, Vector3, Zero};
 use wgpu::{Device, Queue, RenderPass};
 use wgpu_text::TextBrush;
-use wgpu_text::glyph_brush::ab_glyph::FontRef;
-use wgpu_text::glyph_brush::{Section, Text};
+use wgpu_text::glyph_brush::ab_glyph::FontVec;
+use wgpu_text::glyph_brush::{FontId, Section, Text};
 
 #[derive(Clone, Debug)]
 pub struct TextItem {
     pub text: String,
+    pub font_id: FontId,
     pub pos: (f32, f32),
     pub z: f32,
     pub size: f32,
@@ -83,7 +85,7 @@ impl DrawState {
         &mut self,
         device: &Device,
         queue: &Queue,
-        text_brush: &mut TextBrush<FontRef>,
+        text_brush: &mut TextBrush<FontVec>,
     ) -> anyhow::Result<()> {
         for buf in [
             &mut self.rect_buffer,
@@ -114,7 +116,8 @@ impl DrawState {
                         Text::new(&item.text)
                             .with_scale(item.size)
                             .with_color(item.color.to_array())
-                            .with_z(item.z),
+                            .with_z(item.z)
+                            .with_font_id(item.font_id),
                     )
                     .with_screen_position((item.pos.0, item.pos.1))
             }),
@@ -123,7 +126,7 @@ impl DrawState {
         Ok(())
     }
 
-    pub fn draw<'a>(&'a self, pass: &mut RenderPass<'a>, text_brush: &TextBrush<FontRef>) {
+    pub fn draw<'a>(&'a self, pass: &mut RenderPass<'a>, text_brush: &TextBrush<FontVec>) {
         self.rect_buffer.draw(pass);
         self.circle_buffer.draw(pass);
         self.triangle_buffer.draw(pass);
@@ -518,7 +521,7 @@ impl DrawState {
         }
     }
 
-    pub fn draw_text(&mut self, text: &str, x: f32, y: f32, size: f32, color: Color) {
+    pub fn draw_text(&mut self, text: &str, x: f32, y: f32, size: f32, font: &Font, color: Color) {
         self.increment_z();
 
         if self.text_len < self.text_queue.len() {
@@ -533,6 +536,7 @@ impl DrawState {
         } else {
             self.text_queue.push(TextItem {
                 text: text.to_owned(),
+                font_id: font.id,
                 pos: (x, y),
                 z: self.z_offset,
                 size,
