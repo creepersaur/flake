@@ -23,6 +23,6 @@ impl Font {
     }
 
     pub fn from_path(id: usize, path: &str) -> Self {
-        Self::from_bytes_vec(id, std::fs::read(path).expect("Could not read font file"))
+        Self::from_bytes_vec(id, std::fs::read(path).expect("Could not read/find font file"))
     }
 }

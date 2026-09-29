@@ -27,6 +27,17 @@ pub fn flake_quit() {
     ctx(|s| s.exit())
 }
 
+/// Sleeps (waits) for a set amount of seconds. Good for games like tetris/snake.
+///
+/// # Examples
+///
+/// ```
+/// flake_sleep(0.1);
+/// ```
+pub fn flake_sleep(seconds: f32) {
+    std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
+}
+
 /// Gets the winit window used by the application
 ///
 /// # Examples
@@ -688,25 +699,32 @@ pub fn draw_polygon_concave(points: &[Vector2], thickness: f32, color: Color) {
     ctx(|s| s.draw_state.draw_polygon_concave(points, color))
 }
 
-/// Draws text with its top-left corner at `(x, y)` and the given font `size`.
+/// Draws text with its top-left corner at `(x, y)` with the given font, size, and color.
 ///
 /// # Examples
 ///
 /// ```
-/// draw_text("Hello", 10.0, 10.0, 32.0, WHITE);
+/// draw_text("Hello", 10.0, 10.0, 32.0, None, WHITE);           // default font
+/// draw_text("Hello", 10.0, 10.0, 32.0, Some(&font), WHITE);    // loaded font
 /// ```
 pub fn draw_text(t: &str, x: f32, y: f32, size: f32, font: Option<&Font>, c: Color) {
     ctx(|s| s.draw_state.draw_text(&s.fonts, t, x, y, size, font, c));
 }
 
-/// Draws text with its top-left corner at `(x, y)` and the given font `size`.
+/// Loads a `.ttf`/`.otf` font from path and returns the `Font` object.
+/// (Do not load the font every frame, it will lag)
 ///
 /// # Examples
 ///
 /// ```
-/// draw_text("Hello", 10.0, 10.0, 32.0, WHITE);
+/// // Put this before the `flake::run()` to avoid loading it each frame
+/// let font = load_font_from_path("src/Arial.ttf");
+///
+/// flake::run(|| {
+///     draw_text("Hello", 10.0, 10.0, 32.0, Some(&font), WHITE)
+/// })
 /// ```
-pub fn load_ttf_font(path: &str) -> Font {
+pub fn load_font_from_path(path: &str) -> Font {
     if STATE.get().is_some() {
         return ctx(|s| {
             s.load_font_from_path(path);
@@ -716,6 +734,34 @@ pub fn load_ttf_font(path: &str) -> Font {
 
     PENDING_CONFIG.with_borrow_mut(|s| {
         let font = Font::from_path(s.fonts.len() + 1, path);
+        s.fonts.push(font.clone());
+        font
+    })
+}
+
+/// Loads a `.ttf`/`.otf` font from bytes and returns the `Font` object.
+/// (Do not load the font every frame, it will lag)
+///
+/// # Examples
+///
+/// ```
+/// // Put this before the `flake::run()` to avoid loading it each frame
+/// let font = load_font_from_bytes(include_bytes!("Arial.ttf"));
+///
+/// flake::run(|| {
+///     draw_text("Hello", 10.0, 10.0, 32.0, Some(&font), WHITE)
+/// })
+/// ```
+pub fn load_font_from_bytes(bytes: &[u8]) -> Font {
+    if STATE.get().is_some() {
+        return ctx(|s| {
+            s.load_font_from_bytes(bytes);
+            s.fonts[s.fonts.len() - 1].clone()
+        })
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| {
+        let font = Font::from_bytes(s.fonts.len() + 1, bytes);
         s.fonts.push(font.clone());
         font
     })
