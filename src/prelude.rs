@@ -4,15 +4,16 @@
 
 pub use crate::FlakeResult;
 use crate::global::{PENDING_CONFIG, STATE, ctx};
+use crate::misc::font::Font;
 pub use crate::misc::math::*;
 pub use crate::misc::rect::Rect;
+pub use crate::misc::timer::Timer;
 pub use crate::shapes::color::*;
 use std::sync::Arc;
 pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
 use winit::window::Window;
 pub use winit::window::WindowLevel;
-use crate::misc::font::Font;
 
 /// # Out-facing API
 
@@ -27,7 +28,10 @@ pub fn flake_quit() {
     ctx(|s| s.exit())
 }
 
-/// Sleeps (waits) for a set amount of seconds. Good for games like tetris/snake.
+/// Sleeps (waits) for a set amount of seconds.
+/// (Will pause the window thread as well)
+/// App may become "not responding" if time is too high.
+/// Good for games like tetris/snake.
 ///
 /// # Examples
 ///
@@ -36,6 +40,30 @@ pub fn flake_quit() {
 /// ```
 pub fn flake_sleep(seconds: f32) {
     std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
+}
+
+/// Creates a `Timer` whose time goes down each frame. Can be paused. Check `Timer` docs for more info.
+///
+/// # Examples
+///
+/// ```
+/// let mut my_timer = add_timer(Timer::new(5.0));
+///
+/// my_timer.on_completed(|| {
+///     println!("Timer got completed");
+/// });
+/// ```
+pub fn add_timer(timer: Timer) -> Timer {
+    if STATE.get().is_some() {
+        return ctx(|s| {
+            s.add_timer(timer.clone());
+            timer
+        });
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.timers.push(timer.clone()));
+
+    timer
 }
 
 /// Gets the winit window used by the application
@@ -479,7 +507,7 @@ pub fn get_axis(left: KeyCode, right: KeyCode) -> f32 {
 
 pub fn clear_background(c: Color) {
     ctx(|s| {
-        s.clear_color = c;
+        s.clear_color = Some(c);
         s.draw_state.clear();
     });
 }
@@ -729,7 +757,7 @@ pub fn load_font_from_path(path: &str) -> Font {
         return ctx(|s| {
             s.load_font_from_path(path);
             s.fonts[s.fonts.len() - 1].clone()
-        })
+        });
     }
 
     PENDING_CONFIG.with_borrow_mut(|s| {
@@ -757,7 +785,7 @@ pub fn load_font_from_bytes(bytes: &[u8]) -> Font {
         return ctx(|s| {
             s.load_font_from_bytes(bytes);
             s.fonts[s.fonts.len() - 1].clone()
-        })
+        });
     }
 
     PENDING_CONFIG.with_borrow_mut(|s| {

@@ -6,6 +6,7 @@ use crate::draw_state::draw_state::DrawState;
 use crate::global::STATE;
 use crate::input::{keyboard::KeyboardState, mouse::MouseState};
 use crate::misc::font::Font;
+use crate::misc::timer::Timer;
 use crate::model::instance::InstanceRaw;
 use crate::model::texture;
 use crate::model::vertex::Vertex;
@@ -23,11 +24,12 @@ use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::{Window, WindowLevel};
+use crate::prelude::BLACK;
 
 pub struct State {
     // Window, Surface & Device
     pub running: bool,
-    window: Arc<Window>,
+    pub window: Arc<Window>,
     surface: Surface<'static>,
     device: Device,
     queue: Queue,
@@ -40,7 +42,7 @@ pub struct State {
     msaa_view: TextureView,
 
     // Draw State
-    pub clear_color: crate::shapes::color::Color,
+    pub clear_color: Option<crate::shapes::color::Color>,
     pub draw_state: DrawState,
 
     // Text
@@ -60,6 +62,7 @@ pub struct State {
     raw_deltatime: f32,
     deltatime: f32,
     frames: usize,
+    timers: Vec<Timer>,
 
     // Input
     device_state: DeviceState,
@@ -128,10 +131,10 @@ impl State {
             depth_texture,
             msaa_view,
 
-            clear_color: crate::shapes::color::Color::BLACK,
+            clear_color: Some(BLACK),
             draw_state,
 
-            fonts: vec![],
+            fonts: Vec::with_capacity(10),
             text_brush,
 
             camera,
@@ -145,6 +148,7 @@ impl State {
             deltatime: 0.0166,
             raw_deltatime: 0.0166,
             frames: 0,
+            timers: Vec::with_capacity(10),
 
             device_state: DeviceState::new(),
             keyboard_state: KeyboardState::default(),
@@ -514,11 +518,20 @@ impl State {
             self.last_frame = now;
         }
 
+        self.timers.iter_mut().for_each(|x| x.tick(self.deltatime));
+
         let ptr = NonNull::from(&mut *self);
         STATE.set(Some(ptr));
         self.draw_state.clear();
         update_fn();
         STATE.set(None);
+
+        self.timers.retain_mut(|x| {
+            if x.completed() {
+                x.0.borrow_mut().is_active = false;
+            }
+            x.ongoing()
+        });
 
         // Update camera uniform
         self.camera_uniform.update_view_proj(&self.camera);
@@ -533,8 +546,6 @@ impl State {
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {
-        self.window.request_redraw();
-
         if !self.is_surface_configured {
             return Ok(());
         }
@@ -571,7 +582,11 @@ impl State {
                     resolve_target: Some(&view),
                     depth_slice: None,
                     ops: Operations {
-                        load: LoadOp::Clear(self.clear_color.to_wgpu()),
+                        load: if let Some(clear_color) = self.clear_color {
+                            LoadOp::Clear(clear_color.to_wgpu())
+                        } else {
+                            LoadOp::Load
+                        },
                         store: StoreOp::Store,
                     },
                 })],
@@ -595,7 +610,9 @@ impl State {
         self.queue.submit(std::iter::once(encoder.finish()));
         self.queue.present(output);
 
-        Ok(())
+        self.clear_color = None;
+
+        Ok(self.window.request_redraw())
     }
 }
 
@@ -698,6 +715,13 @@ impl State {
         self.frames
     }
 
+    pub fn add_timer(&mut self, timer: Timer) {
+        timer.0.borrow_mut().is_active = true;
+        if !self.timers.contains(&timer) {
+            self.timers.push(timer);
+        }
+    }
+
     /// ## FONT
 
     pub fn load_font_from_path(&mut self, path: &str) {
@@ -706,14 +730,14 @@ impl State {
 
         self.rebuild_text_brush();
     }
-    
+
     pub fn load_font_from_bytes(&mut self, bytes: &[u8]) {
         let font = Font::from_bytes(self.fonts.len(), bytes);
         self.fonts.push(font);
 
         self.rebuild_text_brush();
     }
-    
+
     pub fn load_font(&mut self, font: Font) {
         self.fonts.push(font);
 

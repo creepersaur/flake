@@ -3,6 +3,7 @@ use std::cell::{Cell, RefCell};
 use std::ptr::NonNull;
 use winit::window::WindowLevel;
 use crate::misc::font::Font;
+use crate::misc::timer::Timer;
 
 #[derive(Default, Clone)]
 pub struct PendingConfig {
@@ -22,6 +23,7 @@ pub struct PendingConfig {
     pub target_fps: Option<usize>,
     
     pub fonts: Vec<Font>,
+    pub timers: Vec<Timer>
 }
 
 thread_local! {

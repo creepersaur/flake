@@ -70,15 +70,22 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
         PENDING_CONFIG.with_borrow(|s| {
             self.set_state_prop(s.window_x, |value, state| state.set_window_x(*value));
             self.set_state_prop(s.window_y, |value, state| state.set_window_y(*value));
-            self.set_state_prop(s.window_passthrough, |value, state| state.set_window_passthrough(*value));
+            self.set_state_prop(s.window_passthrough, |value, state| {
+                state.set_window_passthrough(*value)
+            });
 
             self.set_state_prop(s.fps_capped, |value, state| state.set_fps_capped(*value));
             self.set_state_prop(s.target_fps, |value, state| state.set_target_fps(*value));
 
-            self.state.as_mut().unwrap().load_font_from_bytes(include_bytes!("Jetbrains.ttf"));
-            for i in s.fonts.iter() {
-                self.state.as_mut().unwrap().load_font(i.clone());
-            }
+            self.state
+                .as_mut()
+                .unwrap()
+                .load_font_from_bytes(include_bytes!("Jetbrains.ttf"));
+            s.fonts.iter().for_each(|x| self.state.as_mut().unwrap().load_font(x.clone()));
+
+            s.timers
+                .iter()
+                .for_each(|x| self.state.as_mut().unwrap().add_timer(x.clone()))
         });
 
         window.set_visible(true);
@@ -120,12 +127,12 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
             }
             WindowEvent::KeyboardInput {
                 event:
-                    KeyEvent {
-                        physical_key: PhysicalKey::Code(code),
-                        state: key_state,
-                        repeat,
-                        ..
-                    },
+                KeyEvent {
+                    physical_key: PhysicalKey::Code(code),
+                    state: key_state,
+                    repeat,
+                    ..
+                },
                 ..
             } => {
                 if !repeat {
