@@ -495,6 +495,21 @@ pub fn get_axis(left: KeyCode, right: KeyCode) -> f32 {
     })
 }
 
+pub fn get_vector(left: KeyCode, right: KeyCode, up: KeyCode, down: KeyCode) -> Vector2 {
+    ctx(|s| Vector2::new(
+        match (is_key_down(left), is_key_down(right)) {
+            (true, false) => -1.0,
+            (false, true) => 1.0,
+            _ => 0.0,
+        },
+        match (is_key_down(up), is_key_down(down)) {
+            (true, false) => -1.0,
+            (false, true) => 1.0,
+            _ => 0.0,
+        }
+    ))
+}
+
 /// ## DRAWING
 
 /// Clears the background using a color.
