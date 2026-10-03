@@ -258,4 +258,10 @@ impl Rect {
     pub fn draw_lines(&self, thickness: f32, color: Color) {
         draw_rectangle_lines_from_rect(*self, thickness, color);
     }
+    
+    /// Updates the original rect with a new one and returns it as well
+    pub fn update(&mut self, new_rect: Rect) -> Rect {
+        *self = new_rect;
+        new_rect
+    }
 }
