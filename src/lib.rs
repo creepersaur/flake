@@ -5,6 +5,7 @@
 
 use crate::app::App;
 use crate::prelude::{clear_background, Color};
+pub use flake_macros::main as flake;
 
 mod app;
 mod camera;

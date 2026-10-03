@@ -563,6 +563,7 @@ dependencies = [
  "cgmath",
  "device_query",
  "env_logger",
+ "flake_macros",
  "image",
  "log",
  "pollster",
@@ -570,6 +571,14 @@ dependencies = [
  "wgpu",
  "wgpu_text",
  "winit",
+]
+
+[[package]]
+name = "flake_macros"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

@@ -2,7 +2,7 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub use crate::FlakeResult;
+pub use crate::{FlakeResult, flake};
 pub use crate::draw_state::shapes::color::*;
 use crate::global::{PENDING_CONFIG, STATE, ctx};
 use crate::misc::font::Font;

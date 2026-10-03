@@ -5,6 +5,7 @@ authors = ["creepersaur"]
 edition = "2024"
 
 [dependencies]
+flake_macros = { path = "flake_macros" }
 anyhow = "1.0"
 winit = { version = "0.30", features = ["android-native-activity"] }
 env_logger = "0.10"
