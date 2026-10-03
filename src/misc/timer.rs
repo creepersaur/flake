@@ -1,5 +1,8 @@
 use std::cell::RefCell;
+use std::pin::Pin;
 use std::rc::Rc;
+use std::task::{Context, Poll};
+use crate::prelude::add_timer;
 
 /// # Timer
 ///
@@ -64,86 +67,138 @@ pub struct Timer(pub Rc<RefCell<TimerData>>);
 
 #[derive(Default, Clone, Copy, PartialEq, PartialOrd)]
 pub struct TimerData {
+    original_time: f32,
     pub time_left: f32,
+    
     pub paused: bool,
     pub is_active: bool,
-    original_time: f32,
+    pub repeating: bool,
+}
+
+impl Future for Timer {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.completed() {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
 }
 
 impl Timer {
-    // Create a new timer using seconds
+    /// Create a new timer using seconds
     pub fn new(seconds: f32) -> Self {
+        Self(Rc::new(RefCell::new(TimerData {
+            original_time: seconds,
+            time_left: seconds,
+            
+            paused: false,
+            is_active: false,
+            repeating: false,
+        })))
+    }
+    
+    /// Create a new repeating timer using seconds. Restarts after completing
+    pub fn new_repeating(seconds: f32) -> Self {
         Self(Rc::new(RefCell::new(TimerData {
             time_left: seconds,
             paused: false,
             is_active: false,
+            repeating: true,
             original_time: seconds,
         })))
     }
 
-    // Tick down the time left by `dt` (deltatime) only if it's unpaused
+    /// Tick down the time left by `dt` (deltatime) only if it's unpaused
     pub fn tick(&mut self, dt: f32) {
         if !self.0.borrow().paused {
             self.0.borrow_mut().time_left -= dt;
         }
     }
 
-    // Reset the timer to original time (does not include `extend()`)
+    /// Reset the timer to original time (does not include `extend()`)
     pub fn reset(&self) {
         let mut t = self.0.borrow_mut();
         t.time_left = t.original_time;
     }
 
-    // Sets time left to zero (completed) which may also remove the timer from the timer list
-    pub fn finish(&mut self) {
+    /// Sets time left to zero (completed) which may also remove the timer from the timer list
+    pub fn finish(&self) {
         self.0.borrow_mut().time_left = 0.0;
     }
 
-    // Pause the timer
-    pub fn pause(&mut self) {
+    /// Pause the timer
+    pub fn pause(&self) {
         self.0.borrow_mut().paused = true;
     }
 
-    // Unpause the timer
-    pub fn unpause(&mut self) {
+    /// Unpause the timer
+    pub fn unpause(&self) {
         self.0.borrow_mut().paused = false;
     }
 
-    // Set whether timer is paused or not
-    pub fn set_paused(&mut self, paused: bool) {
+    /// Set whether timer is paused or not
+    pub fn set_paused(&self, paused: bool) {
         self.0.borrow_mut().paused = paused;
     }
 
-    // Toggle the timer paused/unpaused
+    /// Toggle the timer paused/unpaused
     pub fn toggle_paused(&self) {
         let mut t = self.0.borrow_mut();
         t.paused = !t.paused;
     }
 
-    // Extend (or decrease) the timer's time left
-    pub fn extend(&mut self, seconds: f32) {
+    /// Extend (or decrease) the timer's time left
+    pub fn extend(&self, seconds: f32) {
         self.0.borrow_mut().time_left += seconds;
     }
 
-    // Check if timer is completed
-    pub fn completed(&self) -> bool {
-        self.0.borrow().time_left <= 0.0
-    }
-
-    // Check if timer is ongoing (not completed)
+    /// Check if timer is ongoing (time left > 0)
     pub fn ongoing(&self) -> bool {
         self.0.borrow().time_left > 0.0
     }
 
-    // Check if timer is active (in the timer list)
+    /// Check if timer is active (in the timer list)
     pub fn is_active(&self) -> bool {
         self.0.borrow().is_active
     }
 
-    // Runs an action if timer is completed (only runs if timer is in timer list)
+    /// Runs an action if timer is completed (only runs if timer is in timer list)
     pub fn on_completion(&self, mut action: impl FnMut()) {
-        if self.completed() && self.0.borrow().is_active {
+        if !self.ongoing() && self.0.borrow().is_active {
             action()
         }
+    }
+
+    /// Returns `true` if the timer was just completed this frame
+    pub fn completed(&self) -> bool {
+        !self.ongoing() && self.0.borrow().is_active
+    }
+
+    /// Restarts the timer and adds it to the timer list
+    pub fn restart(&self) -> Timer {
+        self.reset();
+        self.start()
+    }
+
+    /// Restarts the timer if it just got completed this frame,
+    /// also returns whether its `completed()` or not
+    pub fn completed_and_restart(&self) -> bool {
+        let completed = self.completed();
+        if completed {
+            self.restart();
+        }
+        completed
+    }
+
+    /// Starts the timer (adds it to the timer list)
+    pub fn start(&self) -> Timer {
+        add_timer(self.clone())
+    }
+    
+    pub async fn wait(&self) {
+        self.clone().await
     }
 }

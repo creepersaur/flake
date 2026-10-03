@@ -1,4 +1,6 @@
 #![allow(unused_doc_comments)]
+
+use std::pin::Pin;
 use crate::camera::camera2d::Camera2D;
 use crate::camera::camera3d::Camera3D;
 use crate::camera::{Camera, CameraUniform};
@@ -10,11 +12,13 @@ use crate::misc::timer::Timer;
 use crate::model::instance::InstanceRaw;
 use crate::model::texture;
 use crate::model::vertex::Vertex;
+use crate::prelude::BLACK;
 use cgmath::Vector2;
 use cgmath::prelude::*;
 use device_query::DeviceState;
 use std::ptr::NonNull;
 use std::sync::Arc;
+use std::task::{Context, Waker};
 use std::time::Instant;
 use wgpu::{self, util::DeviceExt, *};
 use wgpu_text::glyph_brush::ab_glyph::FontVec;
@@ -24,7 +28,6 @@ use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::{Window, WindowLevel};
-use crate::prelude::BLACK;
 
 pub struct State {
     // Window, Surface & Device
@@ -36,13 +39,16 @@ pub struct State {
     config: SurfaceConfiguration,
     is_surface_configured: bool,
 
+    // Runtime
+    pub(crate) task: Option<Pin<Box<dyn Future<Output = ()>>>>,
+
     // Pipeline
     render_pipeline: RenderPipeline,
     depth_texture: texture::Texture,
     msaa_view: TextureView,
 
     // Draw State
-    pub clear_color: Option<crate::shapes::color::Color>,
+    pub clear_color: Option<crate::draw_state::shapes::color::Color>,
     pub draw_state: DrawState,
 
     // Text
@@ -62,7 +68,7 @@ pub struct State {
     raw_deltatime: f32,
     deltatime: f32,
     frames: usize,
-    timers: Vec<Timer>,
+    pub timers: Vec<Timer>,
 
     // Input
     device_state: DeviceState,
@@ -126,6 +132,8 @@ impl State {
             queue,
             config,
             is_surface_configured: false,
+
+            task: None,
 
             render_pipeline,
             depth_texture,
@@ -493,7 +501,7 @@ impl State {
         self.mouse_state.set_position(x, y);
     }
 
-    pub fn update(&mut self, update_fn: &mut impl FnMut()) {
+    pub fn update(&mut self) {
         self.mouse_state
             .update_position(&self.window, &self.device_state);
 
@@ -522,13 +530,28 @@ impl State {
 
         let ptr = NonNull::from(&mut *self);
         STATE.set(Some(ptr));
-        self.draw_state.clear();
-        update_fn();
+        {
+            self.draw_state.clear();
+
+            if let Some(mut task) = self.task.take() {
+                let mut cx = Context::from_waker(Waker::noop());
+                if task.as_mut().poll(&mut cx).is_pending() {
+                    self.task = Some(task);
+                } else {
+                    self.running = false;
+                }
+            }
+        }
         STATE.set(None);
 
         self.timers.retain_mut(|x| {
             if x.completed() {
-                x.0.borrow_mut().is_active = false;
+                if x.0.borrow().repeating {
+                    x.restart();
+                    return true;
+                } else {
+                    x.0.borrow_mut().is_active = false;
+                }
             }
             x.ongoing()
         });
@@ -716,8 +739,8 @@ impl State {
     }
 
     pub fn add_timer(&mut self, timer: Timer) {
-        timer.0.borrow_mut().is_active = true;
         if !self.timers.contains(&timer) {
+            timer.0.borrow_mut().is_active = true;
             self.timers.push(timer);
         }
     }

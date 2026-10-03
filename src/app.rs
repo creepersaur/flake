@@ -1,5 +1,6 @@
 use crate::global::PENDING_CONFIG;
 use crate::state::State;
+use std::pin::Pin;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
@@ -8,19 +9,19 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Icon, Window, WindowId};
 
-pub struct App<F: FnMut()> {
+pub struct App {
     pub state: Option<State>,
-    update_fn: F,
+    task: Option<Pin<Box<dyn Future<Output = ()>>>>,
 }
 
-impl<F: FnMut()> App<F> {
-    pub fn run(update_fn: F) -> anyhow::Result<()> {
+impl App {
+    pub fn run(fut: impl Future<Output = ()> + 'static) -> anyhow::Result<()> {
         env_logger::init();
         let event_loop = EventLoop::with_user_event().build()?;
 
         let mut app = App {
             state: None,
-            update_fn,
+            task: Some(Box::pin(fut)),
         };
         event_loop.run_app(&mut app)?;
 
@@ -34,7 +35,7 @@ impl<F: FnMut()> App<F> {
     }
 }
 
-impl<F: FnMut()> ApplicationHandler<State> for App<F> {
+impl ApplicationHandler<State> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.state.is_some() {
             return;
@@ -68,6 +69,10 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
         self.state = Some(pollster::block_on(State::new(window.clone())).unwrap());
 
         PENDING_CONFIG.with_borrow(|s| {
+            self.state
+                .as_mut()
+                .and_then(|state| Some(state.clear_color = s.window_clear_color));
+            
             self.set_state_prop(s.window_x, |value, state| state.set_window_x(*value));
             self.set_state_prop(s.window_y, |value, state| state.set_window_y(*value));
             self.set_state_prop(s.window_passthrough, |value, state| {
@@ -81,13 +86,16 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
                 .as_mut()
                 .unwrap()
                 .load_font_from_bytes(include_bytes!("Jetbrains.ttf"));
-            s.fonts.iter().for_each(|x| self.state.as_mut().unwrap().load_font(x.clone()));
+            s.fonts
+                .iter()
+                .for_each(|x| self.state.as_mut().unwrap().load_font(x.clone()));
 
             s.timers
                 .iter()
                 .for_each(|x| self.state.as_mut().unwrap().add_timer(x.clone()))
         });
 
+        self.state.as_mut().unwrap().task = self.task.take();
         window.set_visible(true);
     }
 
@@ -111,10 +119,11 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
                 if !state.running {
-                    event_loop.exit()
+                    event_loop.exit();
+                    return;
                 }
 
-                state.update(&mut self.update_fn);
+                state.update();
 
                 match state.render() {
                     Ok(_) => {}
@@ -127,12 +136,12 @@ impl<F: FnMut()> ApplicationHandler<State> for App<F> {
             }
             WindowEvent::KeyboardInput {
                 event:
-                KeyEvent {
-                    physical_key: PhysicalKey::Code(code),
-                    state: key_state,
-                    repeat,
-                    ..
-                },
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(code),
+                        state: key_state,
+                        repeat,
+                        ..
+                    },
                 ..
             } => {
                 if !repeat {

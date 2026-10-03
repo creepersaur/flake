@@ -4,6 +4,7 @@ use std::ptr::NonNull;
 use winit::window::WindowLevel;
 use crate::misc::font::Font;
 use crate::misc::timer::Timer;
+use crate::prelude::Color;
 
 #[derive(Default, Clone)]
 pub struct PendingConfig {
@@ -18,6 +19,7 @@ pub struct PendingConfig {
     pub window_passthrough: Option<bool>,
     pub window_level: Option<WindowLevel>,
     pub window_icon: Option<(Vec<u8>, u32, u32)>,
+    pub window_clear_color: Option<Color>,
 
     pub fps_capped: Option<bool>,
     pub target_fps: Option<usize>,
@@ -40,7 +42,7 @@ fn with_global<R>(state: &mut State, f: impl FnOnce() -> R) -> R {
 }
 
 #[inline(always)]
-pub fn ctx<R>(f: impl FnOnce(&mut State) -> R) -> R {
+pub(crate) fn ctx<R>(f: impl FnOnce(&mut State) -> R) -> R {
     STATE.with(|s| {
         let mut p = s
             .get()

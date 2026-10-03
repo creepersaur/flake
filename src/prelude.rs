@@ -3,12 +3,13 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub use crate::FlakeResult;
+pub use crate::draw_state::shapes::color::*;
 use crate::global::{PENDING_CONFIG, STATE, ctx};
 use crate::misc::font::Font;
 pub use crate::misc::math::*;
 pub use crate::misc::rect::Rect;
 pub use crate::misc::timer::Timer;
-pub use crate::shapes::color::*;
+pub use crate::runtime::next_frame::next_frame;
 use std::sync::Arc;
 pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
@@ -56,12 +57,18 @@ pub fn flake_sleep(seconds: f32) {
 pub fn add_timer(timer: Timer) -> Timer {
     if STATE.get().is_some() {
         return ctx(|s| {
-            s.add_timer(timer.clone());
+            if !s.timers.contains(&timer) {
+                s.add_timer(timer.clone());
+            }
             timer
         });
     }
 
-    PENDING_CONFIG.with_borrow_mut(|s| s.timers.push(timer.clone()));
+    PENDING_CONFIG.with_borrow_mut(|s| {
+        if !s.timers.contains(&timer) {
+            s.timers.push(timer.clone())
+        }
+    });
 
     timer
 }
@@ -496,18 +503,20 @@ pub fn get_axis(left: KeyCode, right: KeyCode) -> f32 {
 }
 
 pub fn get_vector(left: KeyCode, right: KeyCode, up: KeyCode, down: KeyCode) -> Vector2 {
-    ctx(|s| Vector2::new(
-        match (is_key_down(left), is_key_down(right)) {
-            (true, false) => -1.0,
-            (false, true) => 1.0,
-            _ => 0.0,
-        },
-        match (is_key_down(up), is_key_down(down)) {
-            (true, false) => -1.0,
-            (false, true) => 1.0,
-            _ => 0.0,
-        }
-    ))
+    ctx(|s| {
+        Vector2::new(
+            match (is_key_down(left), is_key_down(right)) {
+                (true, false) => -1.0,
+                (false, true) => 1.0,
+                _ => 0.0,
+            },
+            match (is_key_down(up), is_key_down(down)) {
+                (true, false) => -1.0,
+                (false, true) => 1.0,
+                _ => 0.0,
+            },
+        )
+    })
 }
 
 /// ## DRAWING
@@ -520,11 +529,15 @@ pub fn get_vector(left: KeyCode, right: KeyCode, up: KeyCode, down: KeyCode) -> 
 /// clear_background(RED);
 /// ```
 
-pub fn clear_background(c: Color) {
-    ctx(|s| {
-        s.clear_color = Some(c);
-        s.draw_state.clear();
-    });
+pub fn clear_background(color: Color) {
+    if STATE.get().is_some() {
+        return ctx(|s| {
+            s.clear_color = Some(color);
+            s.draw_state.clear();
+        });
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|c| c.window_clear_color = Some(color));
 }
 
 /// Draws a filled rectangle with its top-left corner at `(x, y)`.
@@ -535,8 +548,8 @@ pub fn clear_background(c: Color) {
 /// draw_rectangle(100.0, 100.0, 50.0, 80.0, RED);
 /// ```
 
-pub fn draw_rectangle(x: f32, y: f32, w: f32, h: f32, c: Color) {
-    ctx(|s| s.draw_state.draw_rectangle(x, y, w, h, c));
+pub fn draw_rectangle(x: f32, y: f32, w: f32, h: f32, color: Color) {
+    ctx(|s| s.draw_state.draw_rectangle(x, y, w, h, color));
 }
 
 /// Draws a filled rectangle using a `Rect`.
@@ -546,8 +559,8 @@ pub fn draw_rectangle(x: f32, y: f32, w: f32, h: f32, c: Color) {
 /// ```
 /// draw_rectangle_from_rect(100.0, 100.0, 50.0, 80.0, RED);
 /// ```
-pub fn draw_rectangle_from_rect(rect: Rect, c: Color) {
-    draw_rectangle(rect.x, rect.y, rect.w, rect.h, c);
+pub fn draw_rectangle_from_rect(rect: Rect, color: Color) {
+    draw_rectangle(rect.x, rect.y, rect.w, rect.h, color);
 }
 
 /// Draws the outline of a rectangle with its top-left corner at `(x, y)`.
@@ -558,8 +571,8 @@ pub fn draw_rectangle_from_rect(rect: Rect, c: Color) {
 /// draw_rectangle_lines(100.0, 100.0, 50.0, 80.0, 4.0, WHITE);
 /// ```
 
-pub fn draw_rectangle_lines(x: f32, y: f32, w: f32, h: f32, thickness: f32, c: Color) {
-    ctx(|s| s.draw_state.draw_rectangle_lines(x, y, w, h, thickness, c));
+pub fn draw_rectangle_lines(x: f32, y: f32, w: f32, h: f32, thickness: f32, color: Color) {
+    ctx(|s| s.draw_state.draw_rectangle_lines(x, y, w, h, thickness, color));
 }
 
 /// Draws the outline of a rectangle using a `Rect`.
@@ -569,8 +582,8 @@ pub fn draw_rectangle_lines(x: f32, y: f32, w: f32, h: f32, thickness: f32, c: C
 /// ```
 /// draw_rectangle_lines_from_rect(100.0, 100.0, 50.0, 80.0, 4.0, WHITE);
 /// ```
-pub fn draw_rectangle_lines_from_rect(rect: Rect, thickness: f32, c: Color) {
-    draw_rectangle_lines(rect.x, rect.y, rect.w, rect.h, thickness, c);
+pub fn draw_rectangle_lines_from_rect(rect: Rect, thickness: f32, color: Color) {
+    draw_rectangle_lines(rect.x, rect.y, rect.w, rect.h, thickness, color);
 }
 /// Draws a filled rectangle rotated by `rotation` radians around `(x, y)`.
 ///
@@ -580,8 +593,8 @@ pub fn draw_rectangle_lines_from_rect(rect: Rect, thickness: f32, c: Color) {
 /// draw_rectangle_rotated(200.0, 200.0, 50.0, 80.0, std::f32::consts::FRAC_PI_4, GREEN);
 /// ```
 
-pub fn draw_rectangle_rotated(x: f32, y: f32, w: f32, h: f32, rotation: f32, c: Color) {
-    ctx(|s| s.draw_state.draw_rectangle_rotated(x, y, w, h, rotation, c));
+pub fn draw_rectangle_rotated(x: f32, y: f32, w: f32, h: f32, rotation: f32, color: Color) {
+    ctx(|s| s.draw_state.draw_rectangle_rotated(x, y, w, h, rotation, color));
 }
 
 /// Draws the outline of a rectangle rotated by `rotation` radians around `(x, y)`.
@@ -599,11 +612,11 @@ pub fn draw_rectangle_lines_rotated(
     h: f32,
     rotation: f32,
     thickness: f32,
-    c: Color,
+    color: Color,
 ) {
     ctx(|s| {
         s.draw_state
-            .draw_rectangle_lines_rotated(x, y, w, h, rotation, thickness, c)
+            .draw_rectangle_lines_rotated(x, y, w, h, rotation, thickness, color)
     });
 }
 
@@ -615,8 +628,8 @@ pub fn draw_rectangle_lines_rotated(
 /// draw_circle(300.0, 300.0, 40.0, BLUE);
 /// ```
 
-pub fn draw_circle(x: f32, y: f32, r: f32, c: Color) {
-    ctx(|s| s.draw_state.draw_circle(x, y, r, c));
+pub fn draw_circle(x: f32, y: f32, r: f32, color: Color) {
+    ctx(|s| s.draw_state.draw_circle(x, y, r, color));
 }
 
 /// Draws the outline of a circle centered at `(x, y)` with radius `r`.
@@ -627,8 +640,8 @@ pub fn draw_circle(x: f32, y: f32, r: f32, c: Color) {
 /// draw_circle_lines(300.0, 300.0, 40.0, 3.0, WHITE);
 /// ```
 
-pub fn draw_circle_lines(x: f32, y: f32, r: f32, thickness: f32, c: Color) {
-    ctx(|s| s.draw_state.draw_circle_lines(x, y, r, thickness, c));
+pub fn draw_circle_lines(x: f32, y: f32, r: f32, thickness: f32, color: Color) {
+    ctx(|s| s.draw_state.draw_circle_lines(x, y, r, thickness, color));
 }
 
 /// Draws a filled triangle from three points.
@@ -750,8 +763,8 @@ pub fn draw_polygon_concave(points: &[Vector2], thickness: f32, color: Color) {
 /// draw_text("Hello", 10.0, 10.0, 32.0, None, WHITE);           // default font
 /// draw_text("Hello", 10.0, 10.0, 32.0, Some(&font), WHITE);    // loaded font
 /// ```
-pub fn draw_text(t: &str, x: f32, y: f32, size: f32, font: Option<&Font>, c: Color) {
-    ctx(|s| s.draw_state.draw_text(&s.fonts, t, x, y, size, font, c));
+pub fn draw_text(t: &str, x: f32, y: f32, size: f32, font: Option<&Font>, color: Color) {
+    ctx(|s| s.draw_state.draw_text(&s.fonts, t, x, y, size, font, color));
 }
 
 /// Loads a `.ttf`/`.otf` font from path and returns the `Font` object.
@@ -810,9 +823,9 @@ pub fn load_font_from_bytes(bytes: &[u8]) -> Font {
     })
 }
 
-pub fn draw_arrow(x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, head_size: f32, c: Color) {
+pub fn draw_arrow(x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, head_size: f32, color: Color) {
     ctx(|s| {
         s.draw_state
-            .draw_arrow(x1, y1, x2, y2, thickness, head_size, c)
+            .draw_arrow(x1, y1, x2, y2, thickness, head_size, color)
     });
 }

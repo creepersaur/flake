@@ -1,5 +1,5 @@
-use crate::shapes::Shape;
-use crate::shapes::color::Color;
+use crate::draw_state::shapes::Shape;
+use crate::draw_state::shapes::color::Color;
 use cgmath::Vector2;
 
 #[derive(Clone, Debug)]

@@ -12,20 +12,19 @@ mod draw_state;
 pub mod prelude;
 mod input;
 mod model;
-mod shapes;
 mod state;
 mod global;
 mod misc;
+mod runtime;
 
 pub type FlakeResult = anyhow::Result<()>;
 
-pub fn run(update_fn: impl FnMut()) -> anyhow::Result<()> {
-    App::run(update_fn)
+pub fn run_async(fut: impl Future<Output = ()> + 'static) -> FlakeResult {
+    App::run(fut)?;
+    Ok(())
 }
 
-pub fn run_with_bg(color: Color, mut update_fn: impl FnMut()) -> anyhow::Result<()> {
-    App::run(|| {
-        clear_background(color);
-        update_fn();
-    })
+pub fn run_with_bg(color: Color, fut: impl Future<Output = ()> + 'static) -> FlakeResult {
+    clear_background(color);
+    run_async(fut)
 }

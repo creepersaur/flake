@@ -1,11 +1,11 @@
+use crate::draw_state::shapes::circle::{CIRCLE_INDICES, CIRCLE_VERTICES};
+use crate::draw_state::shapes::color::Color;
+use crate::draw_state::shapes::polygon::{cross, point_in_tri};
+use crate::draw_state::shapes::rectangle::{RECT_INDICES, RECT_VERTICES};
+use crate::draw_state::shapes::triangle::{TRI_INDICES, TRI_VERTICES};
+use crate::draw_state::shapes::{Shape, ShapeBuffer};
 use crate::misc::font::Font;
 use crate::model::instance::{Instance, InstanceRaw};
-use crate::shapes::circle::{CIRCLE_INDICES, CIRCLE_VERTICES};
-use crate::shapes::color::Color;
-use crate::shapes::polygon::{cross, point_in_tri};
-use crate::shapes::rectangle::{RECT_INDICES, RECT_VERTICES};
-use crate::shapes::triangle::{TRI_INDICES, TRI_VERTICES};
-use crate::shapes::{Shape, ShapeBuffer};
 use cgmath::{InnerSpace, MetricSpace, One, Quaternion, Rotation3, Vector2, Vector3, Zero};
 use wgpu::{Device, Queue, RenderPass};
 use wgpu_text::TextBrush;
