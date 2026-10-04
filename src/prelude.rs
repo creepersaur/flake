@@ -2,19 +2,23 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub use crate::{FlakeResult, flake};
+use std::borrow::Borrow;
 pub use crate::draw_state::shapes::color::*;
 use crate::global::{PENDING_CONFIG, STATE, ctx};
 use crate::misc::font::Font;
+pub use crate::misc::*;
 pub use crate::misc::math::*;
 pub use crate::misc::rect::Rect;
+pub use crate::misc::span::Span;
 pub use crate::misc::timer::Timer;
 pub use crate::runtime::next_frame::next_frame;
+pub use crate::{FlakeResult, flake};
 use std::sync::Arc;
 pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
 use winit::window::Window;
-pub use winit::window::WindowLevel;
+pub use winit::window::{WindowLevel, WindowButtons};
+use crate::misc::span::RichtextSection;
 
 /// # Out-facing API
 
@@ -101,6 +105,11 @@ pub fn set_window_level(level: WindowLevel) {
     }
 
     PENDING_CONFIG.with_borrow_mut(|s| s.window_level = Some(level));
+}
+
+/// Sets the enabled window buttons (e.g. WindowButtons::CLOSE would disable minimizing)
+pub fn set_window_enabled_buttons(window_buttons: WindowButtons) {
+    ctx(|s| s.get_window().set_enabled_buttons(window_buttons));
 }
 
 /// Sets whether the window is transparent.
@@ -572,7 +581,10 @@ pub fn draw_rectangle_from_rect(rect: Rect, color: Color) {
 /// ```
 
 pub fn draw_rectangle_lines(x: f32, y: f32, w: f32, h: f32, thickness: f32, color: Color) {
-    ctx(|s| s.draw_state.draw_rectangle_lines(x, y, w, h, thickness, color));
+    ctx(|s| {
+        s.draw_state
+            .draw_rectangle_lines(x, y, w, h, thickness, color)
+    });
 }
 
 /// Draws the outline of a rectangle using a `Rect`.
@@ -594,7 +606,10 @@ pub fn draw_rectangle_lines_from_rect(rect: Rect, thickness: f32, color: Color) 
 /// ```
 
 pub fn draw_rectangle_rotated(x: f32, y: f32, w: f32, h: f32, rotation: f32, color: Color) {
-    ctx(|s| s.draw_state.draw_rectangle_rotated(x, y, w, h, rotation, color));
+    ctx(|s| {
+        s.draw_state
+            .draw_rectangle_rotated(x, y, w, h, rotation, color)
+    });
 }
 
 /// Draws the outline of a rectangle rotated by `rotation` radians around `(x, y)`.
@@ -767,6 +782,32 @@ pub fn draw_text(t: &str, x: f32, y: f32, size: f32, font: Option<&Font>, color:
     ctx(|s| s.draw_state.draw_text(&s.fonts, t, x, y, size, font, color));
 }
 
+/// Draws a collection of `Span`s in sequence where each Span can have different properties such as
+/// - text
+/// - color
+/// - size
+/// - font
+/// The `spans` should implement IntoIterator. Which means you can just pass an iterator.
+///
+/// ## Examples
+///
+/// ```
+/// draw_rich_text(vec2(10.0, 10.0), &[
+///     span("Hello there\n", WHITE),
+///     span("My name is ", WHITE),
+///     span("John Doe", RED)
+///         .with_color(RED)
+///         .with_size(32.0)
+/// ]);
+/// ```
+pub fn draw_rich_text<'a, I>(position: Vector2, spans: I)
+where
+    I: IntoIterator,
+    I::Item: Borrow<Span<'a>>,
+{
+    ctx(|s| s.draw_state.draw_richtext(position, spans))
+}
+
 /// Loads a `.ttf`/`.otf` font from path and returns the `Font` object.
 /// (Do not load the font every frame, it will lag)
 ///
@@ -823,7 +864,15 @@ pub fn load_font_from_bytes(bytes: &[u8]) -> Font {
     })
 }
 
-pub fn draw_arrow(x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, head_size: f32, color: Color) {
+pub fn draw_arrow(
+    x1: f32,
+    y1: f32,
+    x2: f32,
+    y2: f32,
+    thickness: f32,
+    head_size: f32,
+    color: Color,
+) {
     ctx(|s| {
         s.draw_state
             .draw_arrow(x1, y1, x2, y2, thickness, head_size, color)

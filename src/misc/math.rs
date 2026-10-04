@@ -11,6 +11,7 @@ pub type Quaternion = cgmath::Quaternion<f32>;
 pub trait FlakeMath: Sized {
     fn normalize_or_zero(&self) -> Self;
     fn one() -> Self;
+    fn default() -> Self;
     fn neg_one() -> Self;
 }
 
@@ -29,6 +30,10 @@ where
 
     fn one() -> Self {
         Self::from_value(T::Scalar::one())
+    }
+
+    fn default() -> Self {
+        Self::zero()
     }
 
     fn neg_one() -> Self {

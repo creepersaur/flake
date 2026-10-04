@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use crate::draw_state::shapes::circle::{CIRCLE_INDICES, CIRCLE_VERTICES};
 use crate::draw_state::shapes::color::Color;
 use crate::draw_state::shapes::polygon::{cross, point_in_tri};
@@ -5,12 +6,14 @@ use crate::draw_state::shapes::rectangle::{RECT_INDICES, RECT_VERTICES};
 use crate::draw_state::shapes::triangle::{TRI_INDICES, TRI_VERTICES};
 use crate::draw_state::shapes::{Shape, ShapeBuffer};
 use crate::misc::font::Font;
+use crate::misc::span::{RichtextSection, SpanRef};
 use crate::model::instance::{Instance, InstanceRaw};
 use cgmath::{InnerSpace, MetricSpace, One, Quaternion, Rotation3, Vector2, Vector3, Zero};
 use wgpu::{Device, Queue, RenderPass};
 use wgpu_text::TextBrush;
 use wgpu_text::glyph_brush::ab_glyph::FontVec;
 use wgpu_text::glyph_brush::{FontId, Section, Text};
+use crate::prelude::Span;
 
 #[derive(Clone, Debug)]
 pub struct TextItem {
@@ -41,6 +44,10 @@ pub struct DrawState {
 
     text_queue: Vec<TextItem>,
     text_len: usize,
+
+    richtext_text: String,
+    span_refs: Vec<SpanRef>,
+    richtext_sections: Vec<RichtextSection>,
 }
 
 impl DrawState {
@@ -78,6 +85,10 @@ impl DrawState {
 
             text_queue: Vec::with_capacity(128),
             text_len: 0,
+
+            richtext_sections: Vec::with_capacity(128),
+            span_refs: Vec::with_capacity(128),
+            richtext_text: String::new(),
         }
     }
 
@@ -107,21 +118,34 @@ impl DrawState {
             buf.upload(device, queue, &self.scratch);
         }
 
-        text_brush.queue(
-            device,
-            queue,
-            self.text_queue[..self.text_len].iter().map(|item| {
-                Section::default()
-                    .add_text(
-                        Text::new(&item.text)
-                            .with_scale(item.size)
-                            .with_color(item.color.to_array())
-                            .with_z(item.z)
-                            .with_font_id(item.font_id),
-                    )
-                    .with_screen_position((item.pos.0, item.pos.1))
-            }),
-        )?;
+        let plain = self.text_queue[..self.text_len].iter().map(|item| {
+            Section::default()
+                .add_text(
+                    Text::new(&item.text)
+                        .with_scale(item.size)
+                        .with_color(item.color.to_array())
+                        .with_z(item.z)
+                        .with_font_id(item.font_id),
+                )
+                .with_screen_position((item.pos.0, item.pos.1))
+        });
+
+        let rich = self.richtext_sections.iter().map(|sec| {
+            let mut section = Section::default()
+                .with_screen_position((sec.position.x, sec.position.y));
+            for r in &self.span_refs[sec.spans.clone()] {
+                section = section.add_text(
+                    Text::new(&self.richtext_text[r.range.clone()])
+                        .with_scale(r.size)
+                        .with_color(r.color.to_array())
+                        .with_z(sec.z)
+                        .with_font_id(r.font_id),
+                );
+            }
+            section
+        });
+
+        text_brush.queue(device, queue, plain.chain(rich))?;
 
         Ok(())
     }
@@ -153,6 +177,10 @@ impl DrawState {
     pub fn clear(&mut self) {
         self.queue.clear();
         self.text_len = 0;
+
+        self.richtext_text.clear();
+        self.span_refs.clear();
+        self.richtext_sections.clear();
 
         self.z_offset = 0.0;
     }
@@ -521,7 +549,16 @@ impl DrawState {
         }
     }
 
-    pub fn draw_text(&mut self, fonts: &[Font], text: &str, x: f32, y: f32, size: f32, font: Option<&Font>, color: Color) {
+    pub fn draw_text(
+        &mut self,
+        fonts: &[Font],
+        text: &str,
+        x: f32,
+        y: f32,
+        size: f32,
+        font: Option<&Font>,
+        color: Color,
+    ) {
         self.increment_z();
 
         if self.text_len < self.text_queue.len() {
@@ -545,6 +582,32 @@ impl DrawState {
         }
 
         self.text_len += 1;
+    }
+
+    pub fn draw_richtext<'a, I>(&mut self, position: Vector2<f32>, spans: I)
+    where
+        I: IntoIterator,
+        I::Item: Borrow<Span<'a>>,
+    {
+        self.increment_z();
+
+        let first = self.span_refs.len();
+        for s in spans {
+            let s: &Span = s.borrow();
+            let start = self.richtext_text.len();
+            self.richtext_text.push_str(s.text);
+            self.span_refs.push(SpanRef {
+                range: start..self.richtext_text.len(),
+                color: s.color,
+                size: s.size,
+                font_id: s.font_id,
+            });
+        }
+        self.richtext_sections.push(RichtextSection {
+            position,
+            z: self.z_offset,
+            spans: first..self.span_refs.len(),
+        });
     }
 
     pub fn draw_arrow(

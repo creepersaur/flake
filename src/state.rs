@@ -651,7 +651,7 @@ impl State {
     }
 
     pub fn set_window_passthrough(&self, passthrough: bool) {
-        self.window.set_cursor_hittest(passthrough).unwrap();
+        self.window.set_cursor_hittest(!passthrough).unwrap();
     }
 
     pub fn set_window_level(&self, level: WindowLevel) {
