@@ -11,7 +11,6 @@ pub type Quaternion = cgmath::Quaternion<f32>;
 pub trait FlakeMath: Sized {
     fn normalize_or_zero(&self) -> Self;
     fn one() -> Self;
-    fn default() -> Self;
     fn neg_one() -> Self;
 }
 
@@ -32,12 +31,26 @@ where
         Self::from_value(T::Scalar::one())
     }
 
-    fn default() -> Self {
-        Self::zero()
-    }
-
     fn neg_one() -> Self {
         Self::from_value(T::Scalar::neg(T::Scalar::one()))
+    }
+}
+
+pub trait FlakeVector2Ext {
+    /// Returns the radian angle [-π, π] of this vector relative to (1, 0)
+    fn angle_rad(&self) -> f32;
+
+    /// Returns the radian direction looking from this point toward a target point
+    fn angle_towards(&self, target: Vector2) -> f32;
+}
+
+impl FlakeVector2Ext for Vector2 {
+    fn angle_rad(&self) -> f32 {
+        self.y.atan2(self.x)
+    }
+
+    fn angle_towards(&self, target: Vector2) -> f32 {
+        (target - *self).angle_rad()
     }
 }
 

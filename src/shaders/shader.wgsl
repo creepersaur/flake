@@ -8,6 +8,7 @@ struct InstanceInput {
     @location(11) tri_point_1: vec2<f32>,
     @location(12) tri_point_2: vec2<f32>,
     @location(13) tri_point_3: vec2<f32>,
+    @location(14) uv_rect: vec4<f32>,
 };
 
 
@@ -15,8 +16,11 @@ struct InstanceInput {
 struct CameraUniform {
     view_proj: mat4x4<f32>,
 };
+
 @group(0) @binding(0)
 var<uniform> camera: CameraUniform;
+@group(1) @binding(0) var t_diffuse: texture_2d<f32>;
+@group(1) @binding(1) var s_diffuse: sampler;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -28,6 +32,7 @@ struct VertexOutput {
     @location(0) color: vec4<f32>,
     @location(1) @interpolate(flat) shape: u32,
     @location(2) uv: vec2<f32>,
+    @location(3) tex_uv: vec2<f32>,
 }
 
 @vertex
@@ -47,6 +52,7 @@ fn vs_main(
     out.color = instance.model_color;
     out.shape = instance.shape;
     out.uv = model.tex_coords;
+    out.tex_uv = instance.uv_rect.xy + model.tex_coords * instance.uv_rect.zw;
 
     if (instance.shape == 2) {
         var tri_points = array<vec2<f32>, 3>(
@@ -66,11 +72,16 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let tex = textureSample(t_diffuse, s_diffuse, in.tex_uv);
+    let color = in.color * tex;
+
+    if color.a <= 0.0 { discard; }
+
     if in.shape == 1 {
         let alpha = 1.0 - smoothstep(0.48, 0.5, length(in.uv - vec2(0.5, 0.5)));
         if alpha <= 0.0 { discard; }
-        return vec4(in.color.rgb, in.color.a * alpha);
+        return vec4(color.rgb, color.a * alpha);
     }
 
-    return in.color;
+    return color;
 }

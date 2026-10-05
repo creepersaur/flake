@@ -265,3 +265,9 @@ impl Rect {
         new_rect
     }
 }
+
+impl Into<[f32; 4]> for Rect {
+    fn into(self) -> [f32; 4] {
+        self.to_array()
+    }
+}

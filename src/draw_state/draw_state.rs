@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use crate::draw_state::batch::Batch;
 use crate::draw_state::shapes::circle::{CIRCLE_INDICES, CIRCLE_VERTICES};
 use crate::draw_state::shapes::color::Color;
 use crate::draw_state::shapes::polygon::{cross, point_in_tri};
@@ -7,13 +7,15 @@ use crate::draw_state::shapes::triangle::{TRI_INDICES, TRI_VERTICES};
 use crate::draw_state::shapes::{Shape, ShapeBuffer};
 use crate::misc::font::Font;
 use crate::misc::span::{RichtextSection, SpanRef};
-use crate::model::instance::{Instance, InstanceRaw};
+use crate::model::instance::{FULL_UV, Instance, InstanceRaw};
+use crate::model::texture::{DrawTextureParams, Texture, TextureEntry};
+use crate::prelude::Span;
 use cgmath::{InnerSpace, MetricSpace, One, Quaternion, Rotation3, Vector2, Vector3, Zero};
+use std::borrow::Borrow;
 use wgpu::{Device, Queue, RenderPass};
 use wgpu_text::TextBrush;
 use wgpu_text::glyph_brush::ab_glyph::FontVec;
 use wgpu_text::glyph_brush::{FontId, Section, Text};
-use crate::prelude::Span;
 
 #[derive(Clone, Debug)]
 pub struct TextItem {
@@ -26,21 +28,15 @@ pub struct TextItem {
 }
 
 #[derive(Clone, Debug)]
-pub struct QueueItem {
-    shape: Shape,
-    instance: Instance,
-    z_offset: f32,
-}
-
-#[derive(Clone, Debug)]
 pub struct DrawState {
     z_offset: f32,
     rect_buffer: ShapeBuffer,
     circle_buffer: ShapeBuffer,
     triangle_buffer: ShapeBuffer,
 
-    queue: Vec<QueueItem>,
-    scratch: Vec<InstanceRaw>,
+    instances: [Vec<InstanceRaw>; 3],
+    batches: Vec<Batch>,
+    last_batch: [Option<usize>; 3],
 
     text_queue: Vec<TextItem>,
     text_len: usize,
@@ -52,27 +48,11 @@ pub struct DrawState {
 
 impl DrawState {
     pub fn new(device: &Device) -> Self {
-        let rect_buffer = ShapeBuffer::new(
-            device,
-            Shape::Rectangle,
-            "Rectangle Buffer",
-            RECT_VERTICES,
-            RECT_INDICES,
-        );
-        let circle_buffer = ShapeBuffer::new(
-            device,
-            Shape::Circle,
-            "Circle Buffer",
-            CIRCLE_VERTICES,
-            CIRCLE_INDICES,
-        );
-        let triangle_buffer = ShapeBuffer::new(
-            device,
-            Shape::Triangle,
-            "Triangle Buffer",
-            TRI_VERTICES,
-            TRI_INDICES,
-        );
+        let rect_buffer = ShapeBuffer::new(device, "Rectangle Buffer", RECT_VERTICES, RECT_INDICES);
+        let circle_buffer =
+            ShapeBuffer::new(device, "Circle Buffer", CIRCLE_VERTICES, CIRCLE_INDICES);
+        let triangle_buffer =
+            ShapeBuffer::new(device, "Triangle Buffer", TRI_VERTICES, TRI_INDICES);
 
         Self {
             z_offset: 0.0,
@@ -80,8 +60,13 @@ impl DrawState {
             circle_buffer,
             triangle_buffer,
 
-            queue: Vec::with_capacity(1024),
-            scratch: Vec::with_capacity(1024),
+            instances: [
+                Vec::with_capacity(1024),
+                Vec::with_capacity(256),
+                Vec::with_capacity(256),
+            ],
+            batches: Vec::with_capacity(64),
+            last_batch: [None; 3],
 
             text_queue: Vec::with_capacity(128),
             text_len: 0,
@@ -98,25 +83,10 @@ impl DrawState {
         queue: &Queue,
         text_brush: &mut TextBrush<FontVec>,
     ) -> anyhow::Result<()> {
-        for buf in [
-            &mut self.rect_buffer,
-            &mut self.circle_buffer,
-            &mut self.triangle_buffer,
-        ] {
-            self.scratch.clear();
-            self.scratch.extend(
-                self.queue
-                    .iter_mut()
-                    .filter(|queue_item| queue_item.shape == buf.shape)
-                    .map(|queue_item| {
-                        queue_item
-                            .instance
-                            .update_with_z_offset(queue_item.z_offset)
-                            .to_raw()
-                    }),
-            );
-            buf.upload(device, queue, &self.scratch);
-        }
+        self.rect_buffer.upload(device, queue, &self.instances[0]);
+        self.circle_buffer.upload(device, queue, &self.instances[1]);
+        self.triangle_buffer
+            .upload(device, queue, &self.instances[2]);
 
         let plain = self.text_queue[..self.text_len].iter().map(|item| {
             Section::default()
@@ -131,8 +101,8 @@ impl DrawState {
         });
 
         let rich = self.richtext_sections.iter().map(|sec| {
-            let mut section = Section::default()
-                .with_screen_position((sec.position.x, sec.position.y));
+            let mut section =
+                Section::default().with_screen_position((sec.position.x, sec.position.y));
             for r in &self.span_refs[sec.spans.clone()] {
                 section = section.add_text(
                     Text::new(&self.richtext_text[r.range.clone()])
@@ -150,12 +120,25 @@ impl DrawState {
         Ok(())
     }
 
-    pub fn draw<'a>(&'a self, pass: &mut RenderPass<'a>, text_brush: &TextBrush<FontVec>) {
-        self.rect_buffer.draw(pass);
-        self.circle_buffer.draw(pass);
-        self.triangle_buffer.draw(pass);
-
+    pub fn draw<'a>(
+        &'a self,
+        pass: &mut RenderPass<'a>,
+        textures: &'a [TextureEntry],
+        text_brush: &TextBrush<FontVec>,
+    ) {
+        for b in &self.batches {
+            pass.set_bind_group(1, &textures[b.texture].bind_group, &[]);
+            self.buffer_for(b.shape).draw_range(pass, b.range.clone());
+        }
         text_brush.draw(pass);
+    }
+
+    fn buffer_for(&self, shape: Shape) -> &ShapeBuffer {
+        match shape {
+            Shape::Rectangle => &self.rect_buffer,
+            Shape::Circle => &self.circle_buffer,
+            Shape::Triangle => &self.triangle_buffer,
+        }
     }
 
     pub fn increment_z(&mut self) {
@@ -165,17 +148,40 @@ impl DrawState {
 
     pub fn push_shape(&mut self, shape: Shape, instance: Instance) {
         self.increment_z();
-        self.queue.push(QueueItem {
-            shape,
-            instance,
-            z_offset: self.z_offset,
-        })
+        self.push_texture_shape(shape, 0, instance);
+    }
+
+    pub fn push_texture_shape(&mut self, shape: Shape, texture: usize, mut instance: Instance) {
+        self.increment_z();
+        let s = shape as usize;
+        let raw = instance.update_with_z_offset(self.z_offset).to_raw();
+        let idx = self.instances[s].len() as u32;
+        self.instances[s].push(raw);
+
+        match self.last_batch[s] {
+            Some(b) if self.batches[b].texture == texture => {
+                self.batches[b].range.end = idx + 1;
+            }
+            _ => {
+                self.last_batch[s] = Some(self.batches.len());
+                self.batches.push(Batch {
+                    shape,
+                    texture,
+                    range: idx..idx + 1,
+                });
+            }
+        }
     }
 }
 
 impl DrawState {
     pub fn clear(&mut self) {
-        self.queue.clear();
+        for v in &mut self.instances {
+            v.clear();
+        }
+        self.batches.clear();
+        self.last_batch = [None; 3];
+
         self.text_len = 0;
 
         self.richtext_text.clear();
@@ -195,6 +201,7 @@ impl DrawState {
                 color,
                 shape: Shape::Rectangle,
                 tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()],
+                uv_rect: FULL_UV,
             },
         );
     }
@@ -250,6 +257,7 @@ impl DrawState {
                 color,
                 shape: Shape::Rectangle,
                 tri_points: [Vector2::zero(); 3],
+                uv_rect: FULL_UV,
             },
         );
     }
@@ -283,6 +291,7 @@ impl DrawState {
                 color,
                 shape: Shape::Circle,
                 tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()],
+                uv_rect: FULL_UV,
             },
         );
     }
@@ -324,6 +333,7 @@ impl DrawState {
                     Vector2::new(x2, y2),
                     Vector2::new(x3, y3),
                 ],
+                uv_rect: FULL_UV,
             },
         );
     }
@@ -635,6 +645,61 @@ impl DrawState {
             x2 + diff_perp.x,
             y2 + diff_perp.y,
             color,
+        );
+    }
+
+    pub fn draw_texture_ex(&mut self, texture: Texture, x: f32, y: f32, p: DrawTextureParams) {
+        let (tw, th) = (texture.width() as f32, texture.height() as f32);
+        let size = p.dest_size.unwrap_or(Vector2::new(tw, th));
+        let [sx, sy, sw, sh] = p.source.map(|s| s.to_array()).unwrap_or([0.0, 0.0, tw, th]);
+
+        let mut uv = [sx / tw, sy / th, sw / tw, sh / th];
+        if p.flip_x {
+            uv[0] += uv[2];
+            uv[2] = -uv[2];
+        }
+        if p.flip_y {
+            uv[1] += uv[3];
+            uv[3] = -uv[3];
+        }
+
+        // quad rotates about its top-left, so move top-left to where
+        // it lands when rotated around the pivot
+        let pivot = p
+            .pivot
+            .unwrap_or(Vector2::new(x + size.x / 2.0, y + size.y / 2.0));
+        let (s, c) = p.rotation.sin_cos();
+        let (dx, dy) = (x - pivot.x, y - pivot.y);
+        let pos = Vector2::new(pivot.x + dx * c - dy * s, pivot.y + dx * s + dy * c);
+
+        self.push_texture_shape(
+            Shape::Rectangle,
+            texture.id,
+            Instance {
+                position: Vector3::new(pos.x, pos.y, 0.0),
+                size,
+                rotation: Quaternion::from_angle_z(cgmath::Rad(p.rotation)),
+                color: p.color,
+                shape: Shape::Rectangle,
+                tri_points: [Vector2::zero(); 3],
+                uv_rect: uv,
+            },
+        );
+    }
+
+    pub fn draw_texture(&mut self, texture: Texture, x: f32, y: f32, w: f32, h: f32, color: Color) {
+        self.push_texture_shape(
+            Shape::Rectangle,
+            texture.id,
+            Instance {
+                position: Vector3::new(x, y, 0.0),
+                size: Vector2::new(w, h),
+                rotation: Quaternion::one(),
+                color,
+                shape: Shape::Rectangle,
+                tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()],
+                uv_rect: FULL_UV,
+            },
         );
     }
 }

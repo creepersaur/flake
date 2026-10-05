@@ -2,23 +2,27 @@ use crate::draw_state::shapes::Shape;
 use crate::draw_state::shapes::color::Color;
 use cgmath::Vector2;
 
+pub(crate) const FULL_UV: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
+
 #[derive(Clone, Debug)]
-pub struct Instance {
+pub(crate) struct Instance {
     pub position: cgmath::Vector3<f32>,
     pub rotation: cgmath::Quaternion<f32>,
-    pub size: cgmath::Vector2<f32>,
+    pub size: Vector2<f32>,
     pub color: Color,
     pub shape: Shape,
     pub tri_points: [Vector2<f32>; 3],
+    pub uv_rect: [f32; 4],
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct InstanceRaw {
+pub(crate) struct InstanceRaw {
     model: [[f32; 4]; 4],
     color: [f32; 4],
     shape: u32,
     tri_points: [[f32; 2]; 3],
+    uv_rect: [f32; 4],
 }
 
 impl Instance {
@@ -26,7 +30,7 @@ impl Instance {
         self.position.z += z_offset;
         self
     }
-    
+
     pub fn to_raw(&self) -> InstanceRaw {
         InstanceRaw {
             model: (cgmath::Matrix4::from_translation(self.position)
@@ -40,6 +44,7 @@ impl Instance {
                 self.tri_points[1].into(),
                 self.tri_points[2].into(),
             ],
+            uv_rect: self.uv_rect,
         }
     }
 }
@@ -111,6 +116,12 @@ impl InstanceRaw {
                         + size_of::<[f32; 4]>() as wgpu::BufferAddress,
                     shader_location: 13,
                     format: wgpu::VertexFormat::Float32x2,
+                },
+                // UV Rect
+                wgpu::VertexAttribute {
+                    offset: std::mem::offset_of!(InstanceRaw, uv_rect) as wgpu::BufferAddress,
+                    shader_location: 14,
+                    format: wgpu::VertexFormat::Float32x4,
                 },
             ],
         }

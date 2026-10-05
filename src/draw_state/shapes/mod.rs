@@ -1,3 +1,4 @@
+use std::ops::Range;
 use crate::model::instance::InstanceRaw;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{Buffer, BufferUsages, Device, IndexFormat, Queue, RenderPass};
@@ -10,7 +11,7 @@ pub mod triangle;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Shape {
+pub(crate) enum Shape {
     Rectangle = 0,
     Circle = 1,
     Triangle = 2,
@@ -26,7 +27,6 @@ impl PartialEq<Shape> for &Shape {
 
 #[derive(Clone, Debug)]
 pub struct ShapeBuffer {
-    pub shape: Shape,
     label: &'static str,
     instance_buffer: Option<Buffer>,
     vertex_buffer: Buffer,
@@ -39,7 +39,6 @@ pub struct ShapeBuffer {
 impl ShapeBuffer {
     pub fn new<A: bytemuck::Pod, B: bytemuck::Pod>(
         device: &Device,
-        shape: Shape,
         label: &'static str,
         vertices: &[A],
         indices: &[B],
@@ -56,7 +55,6 @@ impl ShapeBuffer {
         });
 
         Self {
-            shape,
             label,
             vertex_buffer,
             index_buffer,
@@ -92,11 +90,11 @@ impl ShapeBuffer {
         );
     }
 
-    pub fn draw<'a>(&'a self, pass: &mut RenderPass<'a>) {
+    pub fn draw_range<'a>(&'a self, pass: &mut RenderPass<'a>, range: Range<u32>) {
         let Some(inst) = &self.instance_buffer else {
             return;
         };
-        if self.count == 0 {
+        if range.is_empty() {
             return;
         }
         pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
@@ -105,6 +103,6 @@ impl ShapeBuffer {
             inst.slice(..(self.count * size_of::<InstanceRaw>()) as u64),
         );
         pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
-        pass.draw_indexed(0..self.index_count, 0, 0..self.count as u32);
+        pass.draw_indexed(0..self.index_count, 0, range);
     }
 }

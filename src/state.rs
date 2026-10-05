@@ -10,9 +10,8 @@ use crate::input::{keyboard::KeyboardState, mouse::MouseState};
 use crate::misc::font::Font;
 use crate::misc::timer::Timer;
 use crate::model::instance::InstanceRaw;
-use crate::model::texture;
 use crate::model::vertex::Vertex;
-use crate::prelude::BLACK;
+use crate::prelude::{FilterType, BLACK};
 use cgmath::Vector2;
 use cgmath::prelude::*;
 use device_query::DeviceState;
@@ -28,6 +27,7 @@ use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::{Window, WindowLevel};
+use crate::model::texture::{GpuTexture, TextureEntry};
 
 pub struct State {
     // Window, Surface & Device
@@ -44,8 +44,10 @@ pub struct State {
 
     // Pipeline
     render_pipeline: RenderPipeline,
-    depth_texture: texture::Texture,
+    depth_texture: GpuTexture,
     msaa_view: TextureView,
+    textures: Vec<TextureEntry>,
+    texture_layout: BindGroupLayout,
 
     // Draw State
     pub clear_color: Option<crate::draw_state::shapes::color::Color>,
@@ -96,13 +98,15 @@ impl State {
         let (camera_bind_group, camera_bind_group_layout) =
             Self::get_camera_bind_group(&camera_buffer, &device);
 
-        /// ## Depth Texture
+        /// ## Textures (and Depth)
         let depth_texture =
-            texture::Texture::create_depth_texture(&device, &config, "depth_texture");
+            GpuTexture::create_depth_texture(&device, &config, "depth_texture");
+
+        let texture_layout = Self::get_texture_layout(&device);
 
         /// # Render Pipeline
         let render_pipeline =
-            Self::get_render_pipeline(&device, &config, &camera_bind_group_layout);
+            Self::get_render_pipeline(&device, &config, &camera_bind_group_layout, &texture_layout);
 
         /// # ANTI-ALIASING (MSAA)
         let msaa_view = Self::create_msaa_view(&device, &config);
@@ -115,7 +119,7 @@ impl State {
                 alpha_to_coverage_enabled: true,
             })
             .with_depth_stencil(Some(DepthStencilState {
-                format: texture::Texture::DEPTH_FORMAT,
+                format: GpuTexture::DEPTH_FORMAT,
                 depth_write_enabled: Some(false),
                 depth_compare: Some(CompareFunction::Always),
                 stencil: StencilState::default(),
@@ -138,6 +142,8 @@ impl State {
             render_pipeline,
             depth_texture,
             msaa_view,
+            textures: Vec::with_capacity(128),
+            texture_layout,
 
             clear_color: Some(BLACK),
             draw_state,
@@ -162,6 +168,13 @@ impl State {
             keyboard_state: KeyboardState::default(),
             mouse_state: MouseState::default(),
         })
+    }
+
+    pub fn initialize_state(&mut self) {
+        let white = image::DynamicImage::ImageRgba8(
+            image::RgbaImage::from_pixel(1, 1, image::Rgba([255, 255, 255, 255])),
+        );
+        self.add_texture(white, FilterType::Nearest);
     }
 
     fn create_msaa_view(device: &Device, config: &SurfaceConfiguration) -> TextureView {
@@ -327,19 +340,24 @@ impl State {
         }
     }
 
-    /// Loads the diffuse texture and builds its bind group layout + bind group.
-    #[allow(unused)]
-    fn get_texture_bind_group(device: &Device, queue: &Queue) -> (BindGroupLayout, BindGroup) {
-        let diffuse_texture = texture::Texture::from_bytes(
-            device,
-            queue,
-            include_bytes!("Cupcake.png"),
-            "Cupcake.png",
-        )
-        .expect("failed to load texture");
+    pub fn add_texture(&mut self, img: image::DynamicImage, filter_type: FilterType) -> usize {
+        let gpu = GpuTexture::from_image(&self.device, &self.queue, &img, filter_type, None).unwrap();
+        let bind_group = self.device.create_bind_group(&BindGroupDescriptor {
+            label: Some("texture bind group"),
+            layout: &self.texture_layout,
+            entries: &[
+                BindGroupEntry { binding: 0, resource: BindingResource::TextureView(&gpu.view) },
+                BindGroupEntry { binding: 1, resource: BindingResource::Sampler(&gpu.sampler) },
+            ],
+        });
+        self.textures.push(TextureEntry { bind_group });
+        self.textures.len() - 1
+    }
 
+    /// Loads the diffuse texture and builds its bind group layout + bind group.
+    fn get_texture_layout(device: &Device) -> BindGroupLayout {
         let layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("texture_bind_group_layout"),
+            label: Some("texture layout"),
             entries: &[
                 BindGroupLayoutEntry {
                     binding: 0,
@@ -360,22 +378,7 @@ impl State {
             ],
         });
 
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: Some("diffuse_bind_group"),
-            layout: &layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: BindingResource::TextureView(&diffuse_texture.view),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::Sampler(&diffuse_texture.sampler),
-                },
-            ],
-        });
-
-        (layout, bind_group)
+        layout
     }
 
     fn rebuild_text_brush(&mut self) {
@@ -392,7 +395,7 @@ impl State {
                 alpha_to_coverage_enabled: true,
             })
             .with_depth_stencil(Some(DepthStencilState {
-                format: texture::Texture::DEPTH_FORMAT,
+                format: GpuTexture::DEPTH_FORMAT,
                 depth_write_enabled: Some(false),
                 depth_compare: Some(CompareFunction::Always),
                 stencil: StencilState::default(),
@@ -411,12 +414,13 @@ impl State {
         device: &Device,
         config: &SurfaceConfiguration,
         camera_bind_group_layout: &BindGroupLayout,
+        texture_layout: &BindGroupLayout,
     ) -> RenderPipeline {
         let shader = device.create_shader_module(include_wgsl!("shaders/shader.wgsl"));
 
         let layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[Some(camera_bind_group_layout)],
+            bind_group_layouts: &[Some(camera_bind_group_layout), Some(texture_layout)],
             immediate_size: 0,
         });
 
@@ -450,7 +454,7 @@ impl State {
             },
 
             depth_stencil: Some(DepthStencilState {
-                format: texture::Texture::DEPTH_FORMAT,
+                format: GpuTexture::DEPTH_FORMAT,
                 depth_write_enabled: Some(true),
                 depth_compare: Some(CompareFunction::LessEqual),
                 stencil: StencilState::default(),
@@ -483,7 +487,7 @@ impl State {
         );
         self.msaa_view = Self::create_msaa_view(&self.device, &self.config);
         self.depth_texture =
-            texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
+            GpuTexture::create_depth_texture(&self.device, &self.config, "depth_texture");
 
         self.camera.width = width as f32;
         self.camera.height = height as f32;
@@ -627,7 +631,7 @@ impl State {
             pass.set_pipeline(&self.render_pipeline);
             pass.set_bind_group(0, &self.camera_bind_group, &[]);
 
-            self.draw_state.draw(&mut pass, &self.text_brush);
+            self.draw_state.draw(&mut pass, &self.textures, &self.text_brush);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

@@ -5,6 +5,7 @@ pub mod rect;
 pub mod font;
 pub mod timer;
 pub mod span;
+pub mod flake_image;
 
 macro_rules! simplified_constructors {
     ($($name:ident $(<$lt:lifetime>)? ($($arg:ident: $ty:ty),*) -> $ret:ty => $new:path;)*) => {

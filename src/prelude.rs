@@ -2,23 +2,30 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-use std::borrow::Borrow;
+use crate::draw_state::shapes::Shape;
 pub use crate::draw_state::shapes::color::*;
 use crate::global::{PENDING_CONFIG, STATE, ctx};
+pub use crate::misc::flake_image::Image;
 use crate::misc::font::Font;
-pub use crate::misc::*;
 pub use crate::misc::math::*;
 pub use crate::misc::rect::Rect;
+use crate::misc::span::RichtextSection;
 pub use crate::misc::span::Span;
 pub use crate::misc::timer::Timer;
+pub use crate::misc::*;
+use crate::model::instance::Instance;
+pub use crate::model::texture::DrawTextureParams;
+pub use crate::model::texture::FilterType;
+use crate::model::texture::Texture;
 pub use crate::runtime::next_frame::next_frame;
 pub use crate::{FlakeResult, flake};
+use image::{DynamicImage, GenericImageView, ImageBuffer, Rgb, Rgba};
+use std::borrow::Borrow;
 use std::sync::Arc;
 pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
 use winit::window::Window;
-pub use winit::window::{WindowLevel, WindowButtons};
-use crate::misc::span::RichtextSection;
+pub use winit::window::{WindowButtons, WindowLevel};
 
 /// # Out-facing API
 
@@ -877,4 +884,136 @@ pub fn draw_arrow(
         s.draw_state
             .draw_arrow(x1, y1, x2, y2, thickness, head_size, color)
     });
+}
+
+pub fn screen_size() -> Vector2 {
+    let win = get_window();
+    match win.current_monitor() {
+        Some(m) => {
+            let s = m.size();
+            Vector2::new(s.width as f32, s.height as f32)
+        }
+        None => window_size(),
+    }
+}
+
+pub fn screen_width() -> f32 {
+    screen_size().x
+}
+pub fn screen_height() -> f32 {
+    screen_size().y
+}
+
+/// # TEXTURES
+
+pub fn load_texture(path: &str) -> Texture {
+    ctx(|s| {
+        let image = image::load_from_memory(&std::fs::read(path).unwrap()).unwrap();
+        let width = image.width();
+        let height = image.height();
+
+        Texture {
+            id: s.add_texture(image, FilterType::Linear),
+            width,
+            height,
+        }
+    })
+}
+
+pub fn load_texture_with_filter_type(path: &str, filter_type: FilterType) -> Texture {
+    ctx(|s| {
+        let image = image::load_from_memory(&std::fs::read(path).unwrap()).unwrap();
+        let width = image.width();
+        let height = image.height();
+
+        Texture {
+            id: s.add_texture(image, filter_type),
+            width,
+            height,
+        }
+    })
+}
+
+pub fn load_texture_from_bytes(bytes: &[u8]) -> Texture {
+    ctx(|s| {
+        let image = image::load_from_memory(bytes).unwrap();
+        let (width, height) = image.dimensions();
+
+        Texture {
+            id: s.add_texture(image, FilterType::Linear),
+            width,
+            height,
+        }
+    })
+}
+
+pub fn load_texture_from_bytes_with_filter_type(bytes: &[u8], filter_type: FilterType) -> Texture {
+    ctx(|s| {
+        let image = image::load_from_memory(bytes).unwrap();
+        let (width, height) = image.dimensions();
+
+        Texture {
+            id: s.add_texture(image, filter_type),
+            width,
+            height,
+        }
+    })
+}
+
+pub fn load_texture_from_data(width: u32, height: u32, data: &[f32]) -> Texture {
+    ctx(|s| {
+        let img_buf = ImageBuffer::<Rgba<f32>, Vec<f32>>::from_raw(width, height, data.to_vec())
+            .expect("Buffer size mismatch");
+
+        let dynamic_img = DynamicImage::ImageRgba32F(img_buf);
+
+        Texture {
+            id: s.add_texture(dynamic_img, FilterType::Linear),
+            width,
+            height,
+        }
+    })
+}
+
+pub fn load_texture_from_data_with_filter_type(
+    width: u32,
+    height: u32,
+    data: &[f32],
+    filter_type: FilterType,
+) -> Texture {
+    ctx(|s| {
+        let img_buf = ImageBuffer::<Rgba<f32>, Vec<f32>>::from_raw(width, height, data.to_vec())
+            .expect("Buffer size mismatch");
+
+        let dynamic_img = DynamicImage::ImageRgba32F(img_buf);
+
+        Texture {
+            id: s.add_texture(dynamic_img, filter_type),
+            width,
+            height,
+        }
+    })
+}
+
+pub fn load_texture_from_image(image: Image) -> Texture {
+    ctx(|s| {
+        let img_buf = ImageBuffer::<Rgba<f32>, Vec<f32>>::from_raw(image.width, image.height, image.data.to_vec())
+            .expect("Buffer size mismatch");
+
+        let dynamic_img = DynamicImage::ImageRgba32F(img_buf);
+
+        Texture {
+            id: s.add_texture(dynamic_img, image.filter_type),
+            width: image.width,
+            height: image.height,
+        }
+    })
+}
+
+pub fn draw_texture_ex(texture: Texture, x: f32, y: f32, p: DrawTextureParams) {
+    ctx(|s| s.draw_state.draw_texture_ex(texture, x, y, p))
+}
+
+pub fn draw_texture(texture: Texture, x: f32, y: f32, w: f32, h: f32, tint: Color) {
+    ctx(|s| s.draw_state.draw_texture(texture, x, y, w, h, tint))
 }

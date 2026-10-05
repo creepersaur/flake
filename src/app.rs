@@ -96,6 +96,8 @@ impl ApplicationHandler<State> for App {
         });
 
         self.state.as_mut().unwrap().task = self.task.take();
+        self.state.as_mut().unwrap().initialize_state();
+        
         window.set_visible(true);
     }
 
