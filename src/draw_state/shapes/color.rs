@@ -1,5 +1,5 @@
-use std::ops::{Add, Div, Mul, Sub, AddAssign, SubAssign, MulAssign, DivAssign};
 use crate::prelude::{Vector3, Vector4};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, bytemuck::Zeroable, bytemuck::Pod, PartialEq)]
@@ -39,7 +39,12 @@ impl Color {
 
     // Clamps the color from 0-1
     pub const fn clamped(&self) -> Self {
-        Self::new(self.r.clamp(0.0,1.0), self.g.clamp(0.0,1.0), self.b.clamp(0.0,1.0), self.a.clamp(0.0,1.0))
+        Self::new(
+            self.r.clamp(0.0, 1.0),
+            self.g.clamp(0.0, 1.0),
+            self.b.clamp(0.0, 1.0),
+            self.a.clamp(0.0, 1.0),
+        )
     }
 
     /// Create a color using RGBA. Each value goes from 0-255.
@@ -54,12 +59,7 @@ impl Color {
 
     /// Create a color using RGB. Each value goes from 0-255. (Alpha = 1)
     pub const fn from_rgb8(r: u8, g: u8, b: u8) -> Self {
-        Self::new(
-            r as f32 / 255.0,
-            g as f32 / 255.0,
-            b as f32 / 255.0,
-            1.0
-        )
+        Self::new(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0)
     }
 
     /// Create a color using hue-saturation-value-alpha. All values go from 0-1.
@@ -75,12 +75,12 @@ impl Color {
         let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
         let m = v - c;
 
-        let (r, g, b) = match h as u32 {
-            0..=59 => (c, x, 0.0),
-            60..=119 => (x, c, 0.0),
-            120..=179 => (0.0, c, x),
-            180..=239 => (0.0, x, c),
-            240..=299 => (x, 0.0, c),
+        let (r, g, b) = match h / 60.0 {
+            h_prime if h_prime < 1.0 => (c, x, 0.0),
+            h_prime if h_prime < 2.0 => (x, c, 0.0),
+            h_prime if h_prime < 3.0 => (0.0, c, x),
+            h_prime if h_prime < 4.0 => (0.0, x, c),
+            h_prime if h_prime < 5.0 => (x, 0.0, c),
             _ => (c, 0.0, x),
         };
 
@@ -121,7 +121,7 @@ impl Color {
 
         let expand = |c: char| -> Option<u8> {
             let d = c.to_digit(16)? as u8;
-            Some(d * 16 + d)
+            Some((d << 4) | d)
         };
 
         match hex.len() {
@@ -230,6 +230,18 @@ impl Color {
             b: self.b as f64,
             a: self.a as f64,
         }
+    }
+}
+
+impl From<Color> for [f32; 4] {
+    fn from(c: Color) -> Self {
+        c.to_array()
+    }
+}
+
+impl From<[f32; 4]> for Color {
+    fn from(arr: [f32; 4]) -> Self {
+        Self::new(arr[0], arr[1], arr[2], arr[3])
     }
 }
 
@@ -381,7 +393,7 @@ define_colors! {
 
     GREEN       = (0.0, 1.0, 0.0, 1.0),
     DARK_GREEN  = (0.0, 0.3, 0.0, 1.0),
-    LIGHT_GREEN = (0.2, 1.0, 0.2, 1.0),
+    LIGHT_GREEN = (0.4, 1.0, 0.3, 1.0),
 
     BLUE        = (0.03, 0.04, 1.0, 1.0),
     DARK_BLUE   = (0.02, 0.03, 0.7, 1.0),
@@ -401,9 +413,9 @@ define_colors! {
 
     CYAN        = (0.03, 1.0, 1.0, 1.0),
     DARK_CYAN   = (0.02, 0.7, 0.7, 1.0),
-    LIGHT_CYAN  = (0.2, 1.0, 1.0, 1.0),
+    LIGHT_CYAN  = (0.5, 1.0, 1.0, 1.0),
 
-    ORANGE      = (1.0, 0.2, 0.03, 1.0),
+    ORANGE      = (1.0, 0.3, 0.03, 1.0),
     DARK_ORANGE = (0.7, 0.2, 0.02, 1.0),
     LIGHT_ORANGE= (1.0, 0.45, 0.2, 1.0),
 }

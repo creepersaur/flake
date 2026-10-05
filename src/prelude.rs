@@ -16,7 +16,7 @@ pub use crate::misc::*;
 use crate::model::instance::Instance;
 pub use crate::model::texture::DrawTextureParams;
 pub use crate::model::texture::FilterType;
-use crate::model::texture::Texture;
+use crate::model::texture::{GpuTexture, Texture};
 pub use crate::runtime::next_frame::next_frame;
 pub use crate::{FlakeResult, flake};
 use image::{DynamicImage, GenericImageView, ImageBuffer, Rgb, Rgba};
@@ -906,6 +906,19 @@ pub fn screen_height() -> f32 {
 
 /// # TEXTURES
 
+pub fn create_empty_texture(width: u32, height: u32, filter_type: FilterType) -> Texture {
+    ctx(|s| {
+        let gpu = GpuTexture::empty(&s.device, width, height, filter_type)
+            .expect("Couldn't create empty GpuTexture");
+
+        Texture {
+            id: s.add_gpu_texture(gpu),
+            width,
+            height,
+        }
+    })
+}
+
 pub fn load_texture(path: &str) -> Texture {
     ctx(|s| {
         let image = image::load_from_memory(&std::fs::read(path).unwrap()).unwrap();
@@ -995,19 +1008,11 @@ pub fn load_texture_from_data_with_filter_type(
     })
 }
 
-pub fn load_texture_from_image(image: Image) -> Texture {
-    ctx(|s| {
-        let img_buf = ImageBuffer::<Rgba<f32>, Vec<f32>>::from_raw(image.width, image.height, image.data.to_vec())
-            .expect("Buffer size mismatch");
+pub fn load_texture_from_image(image: &Image) -> Texture {
+    let tex = create_empty_texture(image.width, image.height, image.filter_type);
+    update_texture(tex, image);
 
-        let dynamic_img = DynamicImage::ImageRgba32F(img_buf);
-
-        Texture {
-            id: s.add_texture(dynamic_img, image.filter_type),
-            width: image.width,
-            height: image.height,
-        }
-    })
+    tex
 }
 
 pub fn draw_texture_ex(texture: Texture, x: f32, y: f32, p: DrawTextureParams) {
@@ -1016,4 +1021,8 @@ pub fn draw_texture_ex(texture: Texture, x: f32, y: f32, p: DrawTextureParams) {
 
 pub fn draw_texture(texture: Texture, x: f32, y: f32, w: f32, h: f32, tint: Color) {
     ctx(|s| s.draw_state.draw_texture(texture, x, y, w, h, tint))
+}
+
+pub fn update_texture(texture: Texture, image: &Image) {
+    ctx(|s| s.update_texture(texture.id, image))
 }

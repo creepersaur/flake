@@ -1,6 +1,5 @@
 #![allow(unused_doc_comments)]
 
-use std::pin::Pin;
 use crate::camera::camera2d::Camera2D;
 use crate::camera::camera3d::Camera3D;
 use crate::camera::{Camera, CameraUniform};
@@ -10,11 +9,13 @@ use crate::input::{keyboard::KeyboardState, mouse::MouseState};
 use crate::misc::font::Font;
 use crate::misc::timer::Timer;
 use crate::model::instance::InstanceRaw;
+use crate::model::texture::{GpuTexture, TextureEntry};
 use crate::model::vertex::Vertex;
-use crate::prelude::{FilterType, BLACK};
+use crate::prelude::{BLACK, FilterType, Image};
 use cgmath::Vector2;
 use cgmath::prelude::*;
 use device_query::DeviceState;
+use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
 use std::task::{Context, Waker};
@@ -27,14 +28,13 @@ use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::{Window, WindowLevel};
-use crate::model::texture::{GpuTexture, TextureEntry};
 
 pub struct State {
     // Window, Surface & Device
     pub running: bool,
     pub window: Arc<Window>,
     surface: Surface<'static>,
-    device: Device,
+    pub device: Device,
     queue: Queue,
     config: SurfaceConfiguration,
     is_surface_configured: bool,
@@ -99,8 +99,7 @@ impl State {
             Self::get_camera_bind_group(&camera_buffer, &device);
 
         /// ## Textures (and Depth)
-        let depth_texture =
-            GpuTexture::create_depth_texture(&device, &config, "depth_texture");
+        let depth_texture = GpuTexture::create_depth_texture(&device, &config, "depth_texture");
 
         let texture_layout = Self::get_texture_layout(&device);
 
@@ -171,9 +170,11 @@ impl State {
     }
 
     pub fn initialize_state(&mut self) {
-        let white = image::DynamicImage::ImageRgba8(
-            image::RgbaImage::from_pixel(1, 1, image::Rgba([255, 255, 255, 255])),
-        );
+        let white = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            1,
+            1,
+            image::Rgba([255, 255, 255, 255]),
+        ));
         self.add_texture(white, FilterType::Nearest);
     }
 
@@ -341,16 +342,42 @@ impl State {
     }
 
     pub fn add_texture(&mut self, img: image::DynamicImage, filter_type: FilterType) -> usize {
-        let gpu = GpuTexture::from_image(&self.device, &self.queue, &img, filter_type, None).unwrap();
+        let gpu =
+            GpuTexture::from_image(&self.device, &self.queue, &img, filter_type, None).unwrap();
         let bind_group = self.device.create_bind_group(&BindGroupDescriptor {
             label: Some("texture bind group"),
             layout: &self.texture_layout,
             entries: &[
-                BindGroupEntry { binding: 0, resource: BindingResource::TextureView(&gpu.view) },
-                BindGroupEntry { binding: 1, resource: BindingResource::Sampler(&gpu.sampler) },
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(&gpu.view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::Sampler(&gpu.sampler),
+                },
             ],
         });
-        self.textures.push(TextureEntry { bind_group });
+        self.textures.push(TextureEntry { gpu, bind_group });
+        self.textures.len() - 1
+    }
+
+    pub fn add_gpu_texture(&mut self, gpu: GpuTexture) -> usize {
+        let bind_group = self.device.create_bind_group(&BindGroupDescriptor {
+            label: Some("texture bind group"),
+            layout: &self.texture_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(&gpu.view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::Sampler(&gpu.sampler),
+                },
+            ],
+        });
+        self.textures.push(TextureEntry { gpu, bind_group });
         self.textures.len() - 1
     }
 
@@ -379,6 +406,35 @@ impl State {
         });
 
         layout
+    }
+
+    /// Uploads the current image pixel data to an existing GPU texture.
+    pub fn update_texture(&self, texture_id: usize, image: &Image) {
+        if let Some(entry) = self.textures.get(texture_id) {
+            let texture = &entry.gpu.texture;
+
+            let bytes_per_row = image.width * 4;
+
+            self.queue.write_texture(
+                TexelCopyTextureInfo {
+                    texture,
+                    mip_level: 0,
+                    origin: Origin3d::ZERO,
+                    aspect: TextureAspect::All,
+                },
+                &image.data,
+                TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(image.height),
+                },
+                Extent3d {
+                    width: image.width,
+                    height: image.height,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
     }
 
     fn rebuild_text_brush(&mut self) {
@@ -631,7 +687,8 @@ impl State {
             pass.set_pipeline(&self.render_pipeline);
             pass.set_bind_group(0, &self.camera_bind_group, &[]);
 
-            self.draw_state.draw(&mut pass, &self.textures, &self.text_brush);
+            self.draw_state
+                .draw(&mut pass, &self.textures, &self.text_brush);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

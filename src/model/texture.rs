@@ -1,4 +1,4 @@
-use crate::prelude::{Rect, Vector2, WHITE};
+use crate::prelude::{update_texture, Rect, Vector2, WHITE, Image};
 use anyhow::*;
 use image::GenericImageView;
 use wgpu::*;
@@ -56,6 +56,15 @@ impl Texture {
     pub fn height(&self) -> u32 {
         self.height
     }
+
+    pub fn update(&self, image: &Image) {
+        update_texture(*self, image);
+    }
+}
+
+pub(crate) struct TextureEntry {
+    pub gpu: GpuTexture,
+    pub bind_group: BindGroup,
 }
 
 pub struct GpuTexture {
@@ -66,6 +75,60 @@ pub struct GpuTexture {
 }
 
 impl GpuTexture {
+    #[allow(unused)]
+    pub fn empty(
+        device: &Device,
+        width: u32,
+        height: u32,
+        filter_type: FilterType,
+    ) -> Result<Self> {
+        let size = Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+
+        let mip_level_count = if matches!(filter_type, FilterType::Nearest) {
+            1
+        } else {
+            width.max(height).ilog2() + 1
+        };
+
+        let texture = device.create_texture(&TextureDescriptor {
+            label: Some("texture"),
+            size,
+            mip_level_count,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8UnormSrgb,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+
+        let filter_mode = filter_type.to_wgpu_filter();
+        let mipmap_filter = filter_type.to_wgpu_mipmap_filter();
+
+        let view = texture.create_view(&TextureViewDescriptor::default());
+
+        let sampler = device.create_sampler(&SamplerDescriptor {
+            address_mode_u: AddressMode::ClampToEdge,
+            address_mode_v: AddressMode::ClampToEdge,
+            address_mode_w: AddressMode::ClampToEdge,
+            mag_filter: filter_mode,
+            min_filter: filter_mode,
+            mipmap_filter,
+            ..Default::default()
+        });
+
+        Ok(Self {
+            texture,
+            view,
+            sampler,
+        })
+    }
+
     #[allow(unused)]
     pub fn from_bytes(
         device: &Device,
@@ -286,10 +349,6 @@ impl GpuTexture {
             sampler,
         }
     }
-}
-
-pub(crate) struct TextureEntry {
-    pub bind_group: BindGroup,
 }
 
 /// # DrawTextureParams
