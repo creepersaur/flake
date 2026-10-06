@@ -78,7 +78,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if color.a <= 0.0 { discard; }
 
     if in.shape == 1 {
-        let alpha = 1.0 - smoothstep(0.48, 0.5, length(in.uv - vec2(0.5, 0.5)));
+        let alpha = 1.0 - smoothstep(0.491, 0.5, length(in.uv - vec2(0.5, 0.5)));
         if alpha <= 0.0 { discard; }
         return vec4(color.rgb, color.a * alpha);
     }

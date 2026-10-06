@@ -1,5 +1,5 @@
 use crate::draw_state::batch::Batch;
-use crate::draw_state::shapes::circle::{CIRCLE_INDICES, CIRCLE_VERTICES};
+use crate::draw_state::shapes::circle::{circle_indices, circle_vertices};
 use crate::draw_state::shapes::color::Color;
 use crate::draw_state::shapes::polygon::{cross, point_in_tri};
 use crate::draw_state::shapes::rectangle::{RECT_INDICES, RECT_VERTICES};
@@ -50,7 +50,7 @@ impl DrawState {
     pub fn new(device: &Device) -> Self {
         let rect_buffer = ShapeBuffer::new(device, "Rectangle Buffer", RECT_VERTICES, RECT_INDICES);
         let circle_buffer =
-            ShapeBuffer::new(device, "Circle Buffer", CIRCLE_VERTICES, CIRCLE_INDICES);
+            ShapeBuffer::new(device, "Circle Buffer", circle_vertices(), circle_indices());
         let triangle_buffer =
             ShapeBuffer::new(device, "Triangle Buffer", TRI_VERTICES, TRI_INDICES);
 
@@ -286,7 +286,7 @@ impl DrawState {
             Shape::Circle,
             Instance {
                 position: Vector3::new(x, y, 0.0),
-                size: Vector2::new(r, r),
+                size: Vector2::new(r * 2.0, r * 2.0),
                 rotation: Quaternion::one(),
                 color,
                 shape: Shape::Circle,
