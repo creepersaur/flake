@@ -303,7 +303,7 @@ impl DrawState {
         let points: Vec<Vector2<f32>> = (0..segments)
             .map(|i| {
                 let a = i as f32 * step;
-                Vector2::new(x + r / 2.0 * a.cos(), y + r / 2.0 * a.sin())
+                Vector2::new(x + r * a.cos(), y + r * a.sin())
             })
             .collect();
 
