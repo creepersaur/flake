@@ -10,7 +10,7 @@ use crate::misc::span::{RichtextSection, SpanRef};
 use crate::model::instance::{FULL_UV, Instance, InstanceRaw};
 use crate::model::texture::{DrawTextureParams, Texture, TextureEntry};
 use crate::prelude::Span;
-use cgmath::{InnerSpace, MetricSpace, One, Quaternion, Rotation3, Vector2, Vector3, Zero};
+use cgmath::{InnerSpace, MetricSpace, Vector2, Vector3, Vector4, Zero, vec2, vec4};
 use std::borrow::Borrow;
 use wgpu::{Device, Queue, RenderPass};
 use wgpu_text::TextBrush;
@@ -151,7 +151,7 @@ impl DrawState {
         self.push_texture_shape(shape, 0, instance);
     }
 
-    pub fn push_texture_shape(&mut self, shape: Shape, texture: usize, mut instance: Instance) {
+    pub fn push_texture_shape(&mut self, shape: Shape, texture: usize, instance: Instance) {
         self.increment_z();
         let s = shape as usize;
         let raw = instance.update_with_z_offset(self.z_offset).to_raw();
@@ -191,13 +191,25 @@ impl DrawState {
         self.z_offset = 0.0;
     }
 
-    pub fn draw_rectangle(&mut self, x: f32, y: f32, w: f32, h: f32, color: Color) {
+    pub fn draw_rectangle(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        top_left: f32,
+        top_right: f32,
+        bottom_left: f32,
+        bottom_right: f32,
+        color: Color,
+    ) {
         self.push_shape(
             Shape::Rectangle,
             Instance {
                 position: Vector3::new(x, y, 0.0),
-                size: Vector2::new(w, h),
-                rotation: Quaternion::one(),
+                size: vec2(w, h),
+                rotation: 0.0,
+                radius: Vector4::new(top_left, top_right, bottom_left, bottom_right),
                 color,
                 shape: Shape::Rectangle,
                 tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()],
@@ -212,48 +224,65 @@ impl DrawState {
         y: f32,
         w: f32,
         h: f32,
+        top_left: f32,
+        top_right: f32,
+        bottom_left: f32,
+        bottom_right: f32,
         thickness: f32,
         color: Color,
     ) {
-        self.draw_line(
-            x - thickness / 2.0,
-            y,
-            x + w + thickness / 2.0,
-            y,
-            thickness,
+        let half = thickness * 0.5;
+        // Sharp corners stay sharp rounded ones grow so the stroke is centered on the edge.
+        let grow = |r: f32| if r > 0.0 { r + half } else { 0.0 };
+
+        let mut i = Instance::new(
+            Shape::Rectangle,
+            x - half,
+            y - half,
+            w + thickness,
+            h + thickness,
             color,
         );
-        self.draw_line(x + w, y, x + w, y + h + thickness / 2.0, thickness, color);
-        self.draw_line(x, y + h, x + w + thickness / 2.0, y + h, thickness, color);
-        self.draw_line(x, y, x, y + h + thickness / 2.0, thickness, color);
+
+        // shader order: tl, tr, br, bl
+        i.radius = Vector4::new(
+            grow(top_left),
+            grow(top_right),
+            grow(bottom_right),
+            grow(bottom_left),
+        );
+        i.tri_points[0] = vec2(thickness, 0.0); // thickness is in tri_points cus unused
+
+        self.push_shape(Shape::Rectangle, i);
     }
 
     pub fn draw_rectangle_rotated(
         &mut self,
-        mut x: f32,
-        mut y: f32,
+        x: f32,
+        y: f32,
         w: f32,
         h: f32,
         rotation: f32,
+        top_left: f32,
+        top_right: f32,
+        bottom_left: f32,
+        bottom_right: f32,
         color: Color,
     ) {
-        x -= w / 2.0;
-        y -= h / 2.0;
-        let (s, c) = rotation.sin_cos();
-        let cx = x + w / 2.0;
-        let cy = y + h / 2.0;
+        let half_w = w * 0.5;
+        let half_h = h * 0.5;
 
-        // offset from center to top-left, rotated
-        let (hx, hy) = (-w / 2.0, -h / 2.0);
-        let offset_x = hx * c - hy * s;
-        let offset_y = hx * s + hy * c;
+        let (s, c) = rotation.sin_cos();
+
+        let top_left_pos = vec2(x - half_w * c + half_h * s, y - half_w * s - half_h * c);
 
         self.push_shape(
             Shape::Rectangle,
             Instance {
-                position: Vector3::new(cx + offset_x, cy + offset_y, 0.0),
-                size: Vector2::new(w, h),
-                rotation: Quaternion::from_angle_z(cgmath::Rad(rotation)),
+                position: Vector3::new(top_left_pos.x, top_left_pos.y, 0.0),
+                size: vec2(w, h),
+                rotation,
+                radius: vec4(top_left, top_right, bottom_left, bottom_right),
                 color,
                 shape: Shape::Rectangle,
                 tri_points: [Vector2::zero(); 3],
@@ -261,6 +290,7 @@ impl DrawState {
             },
         );
     }
+
     pub fn draw_rectangle_lines_rotated(
         &mut self,
         x: f32,
@@ -268,17 +298,33 @@ impl DrawState {
         w: f32,
         h: f32,
         rotation: f32,
+        top_left: f32,
+        top_right: f32,
+        bottom_left: f32,
+        bottom_right: f32,
         thickness: f32,
         color: Color,
     ) {
+        let half_w = w * 0.5;
+        let half_h = h * 0.5;
+
         let (s, c) = rotation.sin_cos();
-        let (cx, cy) = (x + w * 0.5, y + h * 0.5);
-        let rot = |dx: f32, dy: f32| {
-            let (dx, dy) = (dx - w * 0.5, dy - h * 0.5);
-            Vector2::new(cx + dx * c - dy * s, cy + dx * s + dy * c)
-        };
-        let points = [rot(0.0, 0.0), rot(w, 0.0), rot(w, h), rot(0.0, h)];
-        self.draw_poly_line_miter(&points, thickness, color, true);
+
+        let top_left_pos = vec2(x - half_w * c + half_h * s, y - half_w * s - half_h * c);
+
+        self.push_shape(
+            Shape::Rectangle,
+            Instance {
+                position: Vector3::new(top_left_pos.x, top_left_pos.y, 0.0),
+                size: vec2(w, h),
+                rotation,
+                radius: vec4(top_left, top_right, bottom_left, bottom_right),
+                color,
+                shape: Shape::Rectangle,
+                tri_points: [vec2(thickness, 0.0), Vector2::zero(), Vector2::zero()],
+                uv_rect: FULL_UV,
+            },
+        );
     }
 
     pub fn draw_circle(&mut self, x: f32, y: f32, r: f32, color: Color) {
@@ -286,8 +332,9 @@ impl DrawState {
             Shape::Circle,
             Instance {
                 position: Vector3::new(x, y, 0.0),
-                size: Vector2::new(r * 2.0, r * 2.0),
-                rotation: Quaternion::one(),
+                size: vec2(r * 2.0, r * 2.0),
+                rotation: 0.0,
+                radius: Vector4::zero(),
                 color,
                 shape: Shape::Circle,
                 tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()],
@@ -303,7 +350,7 @@ impl DrawState {
         let points: Vec<Vector2<f32>> = (0..segments)
             .map(|i| {
                 let a = i as f32 * step;
-                Vector2::new(x + r * a.cos(), y + r * a.sin())
+                vec2(x + r * a.cos(), y + r * a.sin())
             })
             .collect();
 
@@ -324,15 +371,12 @@ impl DrawState {
             Shape::Triangle,
             Instance {
                 position: Vector3::new(0.0, 0.0, 0.0),
-                size: Vector2::new(1.0, 1.0),
-                rotation: Quaternion::one(),
+                size: vec2(1.0, 1.0),
+                rotation: 0.0,
+                radius: Vector4::zero(),
                 color,
                 shape: Shape::Triangle,
-                tri_points: [
-                    Vector2::new(x1, y1),
-                    Vector2::new(x2, y2),
-                    Vector2::new(x3, y3),
-                ],
+                tri_points: [vec2(x1, y1), vec2(x2, y2), vec2(x3, y3)],
                 uv_rect: FULL_UV,
             },
         );
@@ -350,11 +394,7 @@ impl DrawState {
         color: Color,
     ) {
         self.draw_poly_line_miter(
-            &[
-                Vector2::new(x1, y1),
-                Vector2::new(x2, y2),
-                Vector2::new(x3, y3),
-            ],
+            &[vec2(x1, y1), vec2(x2, y2), vec2(x3, y3)],
             thickness,
             color,
             true,
@@ -362,8 +402,8 @@ impl DrawState {
     }
 
     pub fn draw_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, color: Color) {
-        let a = Vector2::new(x1, y1);
-        let b = Vector2::new(x2, y2);
+        let a = vec2(x1, y1);
+        let b = vec2(x2, y2);
         let delta = b - a;
         let angle_radians = delta.y.atan2(delta.x);
 
@@ -373,6 +413,10 @@ impl DrawState {
             a.distance(b),
             thickness,
             angle_radians,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
             color,
         );
     }
@@ -499,7 +543,7 @@ impl DrawState {
         const MITER_LIMIT: f32 = 4.0; // max miter length / half-thickness
 
         // Left-hand normal of a segment direction
-        let normal = |d: Vector2<f32>| Vector2::new(-d.y, d.x);
+        let normal = |d: Vector2<f32>| vec2(-d.y, d.x);
         let dir = |a: Vector2<f32>, b: Vector2<f32>| (b - a).normalize();
 
         // For each point, compute the left and right offset vertices
@@ -632,10 +676,10 @@ impl DrawState {
     ) {
         self.draw_line(x1, y1, x2, y2, thickness, color);
 
-        let a = Vector2::new(x1, y1);
-        let b = Vector2::new(x2, y2);
+        let a = vec2(x1, y1);
+        let b = vec2(x2, y2);
         let diff = (b - a).normalize() * head_size;
-        let diff_perp = Vector2::new(-diff.y, diff.x) / 1.5;
+        let diff_perp = vec2(-diff.y, diff.x) / 1.5;
 
         self.draw_triangle(
             x2 - diff_perp.x,
@@ -650,7 +694,7 @@ impl DrawState {
 
     pub fn draw_texture_ex(&mut self, texture: Texture, x: f32, y: f32, p: DrawTextureParams) {
         let (tw, th) = (texture.width() as f32, texture.height() as f32);
-        let size = p.dest_size.unwrap_or(Vector2::new(tw, th));
+        let size = p.dest_size.unwrap_or(vec2(tw, th));
         let [sx, sy, sw, sh] = p.source.map(|s| s.to_array()).unwrap_or([0.0, 0.0, tw, th]);
 
         let mut uv = [sx / tw, sy / th, sw / tw, sh / th];
@@ -665,12 +709,10 @@ impl DrawState {
 
         // quad rotates about its top-left, so move top-left to where
         // it lands when rotated around the pivot
-        let pivot = p
-            .pivot
-            .unwrap_or(Vector2::new(x + size.x / 2.0, y + size.y / 2.0));
+        let pivot = p.pivot.unwrap_or(vec2(x + size.x / 2.0, y + size.y / 2.0));
         let (s, c) = p.rotation.sin_cos();
         let (dx, dy) = (x - pivot.x, y - pivot.y);
-        let pos = Vector2::new(pivot.x + dx * c - dy * s, pivot.y + dx * s + dy * c);
+        let pos = vec2(pivot.x + dx * c - dy * s, pivot.y + dx * s + dy * c);
 
         self.push_texture_shape(
             Shape::Rectangle,
@@ -678,7 +720,8 @@ impl DrawState {
             Instance {
                 position: Vector3::new(pos.x, pos.y, 0.0),
                 size,
-                rotation: Quaternion::from_angle_z(cgmath::Rad(p.rotation)),
+                rotation: p.rotation,
+                radius: Vector4::zero(),
                 color: p.color,
                 shape: Shape::Rectangle,
                 tri_points: [Vector2::zero(); 3],
@@ -693,8 +736,9 @@ impl DrawState {
             texture.id,
             Instance {
                 position: Vector3::new(x, y, 0.0),
-                size: Vector2::new(w, h),
-                rotation: Quaternion::one(),
+                size: vec2(w, h),
+                rotation: 0.0,
+                radius: Vector4::zero(),
                 color,
                 shape: Shape::Rectangle,
                 tri_points: [Vector2::zero(), Vector2::zero(), Vector2::zero()],

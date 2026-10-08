@@ -1,6 +1,4 @@
-use crate::prelude::{
-    Color, Vector2, draw_rectangle_from_rect, draw_rectangle_lines_from_rect, mouse_position_vec2,
-};
+use crate::prelude::{draw_rectangle_from_rect, draw_rectangle_lines_from_rect, draw_rectangle_lines_rounded, draw_rectangle_rounded_from_rect, draw_rectangle_rounded_from_rect_ex, mouse_position_vec2, Color, Vector2, draw_rectangle_lines_rounded_from_rect, draw_rectangle_lines_rounded_from_rect_ex};
 
 /// # Rect
 /// Contains the position (x, y) and size (width, height) of a rectangle.
@@ -121,6 +119,10 @@ impl Rect {
     pub fn with_position(&self, pos: Vector2) -> Self {
         Self::new(pos.x, pos.y, self.w, self.h)
     }
+    /// Get a new Rect with the specified position
+    pub fn with_position_xy(&self, x: f32, y: f32) -> Self {
+        Self::new(x, y, self.w, self.h)
+    }
 
     /// Get a new Rect with the specified size
     pub fn with_size(&self, size: Vector2) -> Self {
@@ -209,14 +211,29 @@ impl Rect {
         x >= self.x && y >= self.y && x <= self.x + self.w && y <= self.y + self.h
     }
 
+    /// Test if point (x, y) lies inside/on the Rect
+    pub const fn contains_point_fully(&self, x: f32, y: f32) -> bool {
+        x > self.x && y > self.y && x < self.x + self.w && y < self.y + self.h
+    }
+
     /// Test if point (`Vector2`) lies inside/on the Rect
     pub const fn contains_point_vec2(&self, point: Vector2) -> bool {
         self.contains_point(point.x, point.y)
     }
 
+    /// Test if point (`Vector2`) lies inside/on the Rect
+    pub const fn contains_point_fully_vec2(&self, point: Vector2) -> bool {
+        self.contains_point_fully(point.x, point.y)
+    }
+
     /// Test if mouse lies inside/on the Rect
     pub fn contains_mouse(&self) -> bool {
         self.contains_point_vec2(mouse_position_vec2())
+    }
+
+    /// Test if mouse lies inside/on the Rect
+    pub fn contains_mouse_fully(&self) -> bool {
+        self.contains_point_fully_vec2(mouse_position_vec2())
     }
 
     /// AABB overlap test
@@ -249,20 +266,67 @@ impl Rect {
             && self.y + self.h >= other.y + other.h
     }
 
+    /// Updates the original rect with a new one and returns it as well
+    pub fn update(&mut self, new_rect: Rect) -> Rect {
+        *self = new_rect;
+        new_rect
+    }
+
     /// Draw the Rect to the screen using a color
     pub fn draw(&self, color: Color) {
         draw_rectangle_from_rect(*self, color);
+    }
+
+    pub fn draw_rounded(&self, radius: f32, color: Color) {
+        draw_rectangle_rounded_from_rect(*self, radius, color);
+    }
+
+    pub fn draw_rounded_ex(
+        &self,
+        top_left: f32,
+        top_right: f32,
+        bottom_left: f32,
+        bottom_right: f32,
+        color: Color,
+    ) {
+        draw_rectangle_rounded_from_rect_ex(
+            *self,
+            top_left,
+            top_right,
+            bottom_left,
+            bottom_right,
+            color,
+        );
     }
 
     /// Draw the Rect's outline to the screen using a color and thickness
     pub fn draw_lines(&self, thickness: f32, color: Color) {
         draw_rectangle_lines_from_rect(*self, thickness, color);
     }
-    
-    /// Updates the original rect with a new one and returns it as well
-    pub fn update(&mut self, new_rect: Rect) -> Rect {
-        *self = new_rect;
-        new_rect
+
+
+    pub fn draw_lines_rounded(&self, radius: f32, thickness: f32, color: Color) {
+        draw_rectangle_lines_rounded_from_rect(*self, radius, thickness, color);
+    }
+
+    pub fn draw_lines_rounded_ex(
+        &self,
+        top_left: f32,
+        top_right: f32,
+        bottom_left: f32,
+        bottom_right: f32,
+        thickness: f32,
+        color: Color,
+    ) {
+        draw_rectangle_lines_rounded_from_rect_ex(
+            *self,
+            top_left,
+            top_right,
+            bottom_left,
+            bottom_right,
+            thickness,
+            color,
+        );
     }
 }
 

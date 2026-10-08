@@ -27,7 +27,7 @@ pub use winit::keyboard::KeyCode;
 use winit::window::Window;
 pub use winit::window::{WindowButtons, WindowLevel};
 
-/// # Out-facing API
+// -- Out-facing API --------------------------------------------------------------------------------------------------------------
 
 /// Exits the running application, must be called while running.
 ///
@@ -114,7 +114,8 @@ pub fn set_window_level(level: WindowLevel) {
     PENDING_CONFIG.with_borrow_mut(|s| s.window_level = Some(level));
 }
 
-/// Sets the enabled window buttons (e.g. WindowButtons::CLOSE would disable minimizing)
+/// Sets which window buttons are enabled. Any button not included is disabled
+/// (e.g. `WindowButtons::CLOSE` leaves only the close button).
 pub fn set_window_enabled_buttons(window_buttons: WindowButtons) {
     ctx(|s| s.get_window().set_enabled_buttons(window_buttons));
 }
@@ -137,7 +138,8 @@ pub fn set_window_decorations(enabled: bool) {
 
     PENDING_CONFIG.with_borrow_mut(|s| s.window_decorations = Some(enabled));
 }
-/// # Window
+
+// -- Window --------------------------------------------------------------------------------------------------------------
 
 /// Sets the title of the window.
 ///
@@ -191,6 +193,7 @@ pub fn set_window_icon(path: &str) {
     PENDING_CONFIG.with_borrow_mut(|s| s.window_icon = Some((rgba, width, height)));
 }
 
+/// Sets the window icon from encoded image bytes (PNG, etc.). Panics if the bytes aren't a valid image.
 pub fn set_window_icon_bytes(bytes: &[u8]) {
     let img = image::load_from_memory(bytes)
         .expect("image icon does not exist at path")
@@ -320,11 +323,22 @@ pub fn set_window_height(h: u32) {
 /// set_window_size(500, 500);
 /// ```
 pub fn set_window_size(w: u32, h: u32) {
-    set_window_width(w);
-    set_window_height(h);
+    if STATE.get().is_some() {
+        return ctx(|s| s.set_window_size(w, h));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| {
+        s.window_width = Some(w);
+        s.window_height = Some(h);
+    });
 }
 
-/// # TIME
+/// Sets whether the window can be resized using the resize handles.
+pub fn set_window_resizable(resizeable: bool) {
+    ctx(|s| s.window.set_resizable(resizeable));
+}
+
+// -- TIME --------------------------------------------------------------------------------------------------------------
 
 /// Gets the frames per second of the application.
 /// (Limited by target framerate & fps cap). Uncap the FPS using `set_fps_capped(false)`.
@@ -393,7 +407,7 @@ pub fn get_frames() -> usize {
     ctx(|s| s.get_frames())
 }
 
-/// ## INPUT
+// -- INPUT --------------------------------------------------------------------------------------------------------------
 
 /// Returns the window-relative mouse x and y position in a tuple.
 ///
@@ -428,6 +442,7 @@ pub fn mouse_screen_position() -> (f32, f32) {
     ctx(|s| s.mouse_state.get_screen_position().into())
 }
 
+/// Requests keyboard focus for the window.
 pub fn focus_window() {
     get_window().focus_window();
 }
@@ -497,19 +512,21 @@ pub fn is_key_down(key: KeyCode) -> bool {
 pub fn is_key_pressed(key: KeyCode) -> bool {
     ctx(|s| s.keyboard_state.is_key_pressed(key))
 }
+
 /// Checks if a key on the keyboard was just released.
 ///
 /// # Examples
 ///
 /// ```
 /// if is_key_released(KeyCode::Space) {
-/// println!("User let go of Space once"); /// }
+///     println!("User let go of Space");
+/// }
 /// ```
-
 pub fn is_key_released(key: KeyCode) -> bool {
     ctx(|s| s.keyboard_state.is_key_released(key))
 }
 
+/// Returns -1.0 if only `left` is held, 1.0 if only `right` is held, otherwise 0.0.
 pub fn get_axis(left: KeyCode, right: KeyCode) -> f32 {
     ctx(|s| match (is_key_down(left), is_key_down(right)) {
         (true, false) => -1.0,
@@ -518,6 +535,8 @@ pub fn get_axis(left: KeyCode, right: KeyCode) -> f32 {
     })
 }
 
+/// Returns a direction from four keys. Up is -1.0 on Y (screen coordinates).
+/// The result is not normalized, so diagonals have length √2.
 pub fn get_vector(left: KeyCode, right: KeyCode, up: KeyCode, down: KeyCode) -> Vector2 {
     ctx(|s| {
         Vector2::new(
@@ -535,7 +554,7 @@ pub fn get_vector(left: KeyCode, right: KeyCode, up: KeyCode, down: KeyCode) -> 
     })
 }
 
-/// ## DRAWING
+// -- DRAWING --------------------------------------------------------------------------------------------------------------
 
 /// Clears the background using a color.
 ///
@@ -565,7 +584,59 @@ pub fn clear_background(color: Color) {
 /// ```
 
 pub fn draw_rectangle(x: f32, y: f32, w: f32, h: f32, color: Color) {
-    ctx(|s| s.draw_state.draw_rectangle(x, y, w, h, color));
+    draw_rectangle_rounded(x, y, w, h, 0.0, color);
+}
+
+/// Draws a **rounded**, filled rectangle with its top-left corner at `(x, y)`.
+/// All corners have the same radius. Use `draw_rectangle_rounded_ex()` to set all the radii separately.
+///
+/// # Examples
+///
+/// ```
+/// draw_rectangle_rounded(100.0, 100.0, 50.0, 80.0, 20.0, RED); // 20.0 is the radius of each corner
+/// ```
+pub fn draw_rectangle_rounded(x: f32, y: f32, w: f32, h: f32, radius: f32, color: Color) {
+    draw_rectangle_rounded_ex(x, y, w, h, radius, radius, radius, radius, color)
+}
+
+/// Draws a **rounded**, filled rectangle with its top-left corner at `(x, y)`
+/// with the ability to set each corner's radius manually.
+///
+/// # Examples
+///
+/// ```
+/// draw_rectangle_rounded_ex(
+///     x, y,
+///     w, h,
+///     top_left, top_right,
+///     bottom_left, bottom_right,
+///     RED
+/// );
+/// ```
+pub fn draw_rectangle_rounded_ex(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    top_left: f32,
+    top_right: f32,
+    bottom_left: f32,
+    bottom_right: f32,
+    color: Color,
+) {
+    ctx(|s| {
+        s.draw_state.draw_rectangle(
+            x,
+            y,
+            w,
+            h,
+            top_left,
+            top_right,
+            bottom_left,
+            bottom_right,
+            color,
+        )
+    });
 }
 
 /// Draws a filled rectangle using a `Rect`.
@@ -573,10 +644,104 @@ pub fn draw_rectangle(x: f32, y: f32, w: f32, h: f32, color: Color) {
 /// # Examples
 ///
 /// ```
-/// draw_rectangle_from_rect(100.0, 100.0, 50.0, 80.0, RED);
+/// draw_rectangle_from_rect(rect, RED);
 /// ```
 pub fn draw_rectangle_from_rect(rect: Rect, color: Color) {
     draw_rectangle(rect.x, rect.y, rect.w, rect.h, color);
+}
+
+/// Draws a **rounded**, filled rectangle using a `Rect` where all corners have the same radius.
+/// Use `draw_rectangle_rounded_from_rect_ex()` to set all radii separately.
+///
+/// # Examples
+///
+/// ```
+/// draw_rectangle_rounded_from_rect(rect, 20.0, RED); // 20.0 is the radius
+/// ```
+pub fn draw_rectangle_rounded_from_rect(rect: Rect, radius: f32, color: Color) {
+    draw_rectangle_rounded(rect.x, rect.y, rect.w, rect.h, radius, color);
+}
+
+/// Draws **rounded**, outlines of a rectangle using a `Rect` where all corners have the same radius.
+/// Use `draw_rectangle_lines_rounded_from_rect_ex()` to set all radii separately.
+///
+/// # Examples
+///
+/// ```
+/// draw_rectangle_lines_rounded_from_rect(rect, 20.0, RED); // 20.0 is the radius
+/// ```
+pub fn draw_rectangle_lines_rounded_from_rect(
+    rect: Rect,
+    radius: f32,
+    thickness: f32,
+    color: Color,
+) {
+    draw_rectangle_lines_rounded(rect.x, rect.y, rect.w, rect.h, radius, thickness, color);
+}
+
+/// Draws **rounded**, outlines of a rectangle using a `Rect` where all corners have the same radius.
+/// Use `draw_rectangle_lines_rounded_from_rect_ex()` to set all radii separately.
+///
+/// # Examples
+///
+/// ```
+/// draw_rectangle_lines_rounded_from_rect(rect, 20.0, RED); // 20.0 is the radius
+/// ```
+pub fn draw_rectangle_lines_rounded_from_rect_ex(
+    rect: Rect,
+    top_left: f32,
+    top_right: f32,
+    bottom_left: f32,
+    bottom_right: f32,
+    thickness: f32,
+    color: Color,
+) {
+    draw_rectangle_lines_rounded_ex(
+        rect.x,
+        rect.y,
+        rect.w,
+        rect.h,
+        top_left,
+        top_right,
+        bottom_left,
+        bottom_right,
+        thickness,
+        color,
+    );
+}
+
+/// Draws a **rounded**, filled rectangle using a `Rect`,
+/// with the ability to set each corner's radius separately.
+///
+/// # Examples
+///
+/// ```
+/// draw_rectangle_rounded_from_rect_ex(
+///     rect,
+///     top_left, top_right,
+///     bottom_left, bottom_right,
+///     RED
+/// );
+/// ```
+pub fn draw_rectangle_rounded_from_rect_ex(
+    rect: Rect,
+    top_left: f32,
+    top_right: f32,
+    bottom_left: f32,
+    bottom_right: f32,
+    color: Color,
+) {
+    draw_rectangle_rounded_ex(
+        rect.x,
+        rect.y,
+        rect.w,
+        rect.h,
+        top_left,
+        top_right,
+        bottom_left,
+        bottom_right,
+        color,
+    );
 }
 
 /// Draws the outline of a rectangle with its top-left corner at `(x, y)`.
@@ -586,12 +751,8 @@ pub fn draw_rectangle_from_rect(rect: Rect, color: Color) {
 /// ```
 /// draw_rectangle_lines(100.0, 100.0, 50.0, 80.0, 4.0, WHITE);
 /// ```
-
 pub fn draw_rectangle_lines(x: f32, y: f32, w: f32, h: f32, thickness: f32, color: Color) {
-    ctx(|s| {
-        s.draw_state
-            .draw_rectangle_lines(x, y, w, h, thickness, color)
-    });
+    draw_rectangle_lines_rounded(x, y, w, h, thickness, 0.0, color)
 }
 
 /// Draws the outline of a rectangle using a `Rect`.
@@ -599,34 +760,93 @@ pub fn draw_rectangle_lines(x: f32, y: f32, w: f32, h: f32, thickness: f32, colo
 /// # Examples
 ///
 /// ```
-/// draw_rectangle_lines_from_rect(100.0, 100.0, 50.0, 80.0, 4.0, WHITE);
+/// draw_rectangle_lines_from_rect(rect, 4.0, WHITE);
 /// ```
 pub fn draw_rectangle_lines_from_rect(rect: Rect, thickness: f32, color: Color) {
     draw_rectangle_lines(rect.x, rect.y, rect.w, rect.h, thickness, color);
 }
-/// Draws a filled rectangle rotated by `rotation` radians around `(x, y)`.
+
+/// Draws the outline of a **rounded** rectangle with its top-left corner at `(x, y)`.
+/// All corners have the same radius. The stroke is centered on the rectangle's edge.
+/// Use `draw_rectangle_lines_rounded_ex()` to set each corner's radius separately.
+///
+/// # Examples
+///
+/// ```
+/// draw_rectangle_lines_rounded(100.0, 100.0, 50.0, 80.0, 12.0, 3.0, WHITE);
+/// // radius = 12.0, thickness = 3.0
+/// ```
+pub fn draw_rectangle_lines_rounded(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    radius: f32,
+    thickness: f32,
+    color: Color,
+) {
+    draw_rectangle_lines_rounded_ex(x, y, w, h, radius, radius, radius, radius, thickness, color);
+}
+
+/// Draws the outline of a **rounded** rectangle with its top-left corner at `(x, y)`,
+/// with the ability to set each corner's radius separately.
+/// Radii are clamped to half the shorter side.
+///
+/// # Examples
+///
+/// ```
+/// draw_rectangle_lines_rounded_ex(
+///     100.0, 100.0, 50.0, 80.0,
+///     20.0, 0.0,   // top_left, top_right
+///     0.0, 20.0,   // bottom_left, bottom_right
+///     3.0, WHITE,  // thickness, color
+/// );
+/// ```
+pub fn draw_rectangle_lines_rounded_ex(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    top_left: f32,
+    top_right: f32,
+    bottom_left: f32,
+    bottom_right: f32,
+    thickness: f32,
+    color: Color,
+) {
+    ctx(|s| {
+        s.draw_state.draw_rectangle_lines(
+            x,
+            y,
+            w,
+            h,
+            top_left,
+            top_right,
+            bottom_left,
+            bottom_right,
+            thickness,
+            color,
+        )
+    });
+}
+
+/// Draws a filled rectangle of size `w` x `h` centered at `(x, y)`,
+/// rotated by `rotation` radians around that center.
 ///
 /// # Examples
 ///
 /// ```
 /// draw_rectangle_rotated(200.0, 200.0, 50.0, 80.0, std::f32::consts::FRAC_PI_4, GREEN);
 /// ```
-
 pub fn draw_rectangle_rotated(x: f32, y: f32, w: f32, h: f32, rotation: f32, color: Color) {
     ctx(|s| {
         s.draw_state
-            .draw_rectangle_rotated(x, y, w, h, rotation, color)
+            .draw_rectangle_rotated(x, y, w, h, rotation, 0.0, 0.0, 0.0, 0.0, color)
     });
 }
 
-/// Draws the outline of a rectangle rotated by `rotation` radians around `(x, y)`.
-///
-/// # Examples
-///
-/// ```
-/// draw_rectangle_lines_rotated(200.0, 200.0, 50.0, 80.0, 0.5, 3.0, WHITE);
-/// ```
-
+/// Draws the outline of a rectangle with its top-left corner at `(x, y)` (before rotation),
+/// rotated by `rotation` radians around its center.
 pub fn draw_rectangle_lines_rotated(
     x: f32,
     y: f32,
@@ -637,8 +857,103 @@ pub fn draw_rectangle_lines_rotated(
     color: Color,
 ) {
     ctx(|s| {
-        s.draw_state
-            .draw_rectangle_lines_rotated(x, y, w, h, rotation, thickness, color)
+        s.draw_state.draw_rectangle_lines_rotated(
+            x, y, w, h, rotation, 0.0, 0.0, 0.0, 0.0, thickness, color,
+        )
+    });
+}
+
+/// Draws a rounded, filled rectangle centered at `(x, y)`,
+/// rotated by `rotation` radians around that center.
+/// All corners have the same radius.
+pub fn draw_rectangle_rounded_rotated(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    rotation: f32,
+    radius: f32,
+    color: Color,
+) {
+    draw_rectangle_rounded_rotated_ex(x, y, w, h, rotation, radius, radius, radius, radius, color);
+}
+
+pub fn draw_rectangle_rounded_rotated_ex(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    rotation: f32,
+    top_left: f32,
+    top_right: f32,
+    bottom_left: f32,
+    bottom_right: f32,
+    color: Color,
+) {
+    ctx(|s| {
+        s.draw_state.draw_rectangle_rotated(
+            x,
+            y,
+            w,
+            h,
+            rotation,
+            top_left,
+            top_right,
+            bottom_left,
+            bottom_right,
+            color,
+        )
+    });
+}
+
+/// Draws the outline of a rounded rectangle centered at `(x, y)`,
+/// rotated by `rotation` radians around that center.
+/// All corners have the same radius.
+pub fn draw_rectangle_lines_rounded_rotated(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    rotation: f32,
+    radius: f32,
+    thickness: f32,
+    color: Color,
+) {
+    draw_rectangle_lines_rounded_rotated_ex(
+        x, y, w, h, rotation, radius, radius, radius, radius, thickness, color,
+    );
+}
+
+/// Draws the outline of a rounded rectangle centered at `(x, y)`,
+/// rotated by `rotation` radians around that center.
+/// Can set each corner's radius separately.
+pub fn draw_rectangle_lines_rounded_rotated_ex(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    rotation: f32,
+    top_left: f32,
+    top_right: f32,
+    bottom_left: f32,
+    bottom_right: f32,
+    thickness: f32,
+    color: Color,
+) {
+    ctx(|s| {
+        s.draw_state.draw_rectangle_lines_rotated(
+            x,
+            y,
+            w,
+            h,
+            rotation,
+            top_left,
+            top_right,
+            bottom_left,
+            bottom_right,
+            thickness,
+            color,
+        )
     });
 }
 
@@ -649,7 +964,6 @@ pub fn draw_rectangle_lines_rotated(
 /// ```
 /// draw_circle(300.0, 300.0, 40.0, BLUE);
 /// ```
-
 pub fn draw_circle(x: f32, y: f32, r: f32, color: Color) {
     ctx(|s| s.draw_state.draw_circle(x, y, r, color));
 }
@@ -754,10 +1068,12 @@ pub fn draw_poly_line_rounded(points: &[Vector2], thickness: f32, color: Color, 
 /// # Examples
 ///
 /// ```
-/// let pts = [Vector2::new(100.0, 100.0), Vector2::new(200.0, 100.0),
-/// Vector2::new(220.0, 180.0), Vector2::new(80.0, 180.0)];/// draw_polygon(&pts, GREEN);
+/// let pts = [
+///     Vector2::new(100.0, 100.0), Vector2::new(200.0, 100.0),
+///     Vector2::new(220.0, 180.0), Vector2::new(80.0, 180.0),
+/// ];
+/// draw_polygon(&pts, GREEN);
 /// ```
-
 pub fn draw_polygon(points: &[Vector2], thickness: f32, color: Color) {
     ctx(|s| s.draw_state.draw_polygon(points, color))
 }
@@ -768,11 +1084,13 @@ pub fn draw_polygon(points: &[Vector2], thickness: f32, color: Color) {
 /// # Examples
 ///
 /// ```
-/// let pts = [Vector2::new(100.0, 100.0), Vector2::new(200.0, 100.0),
-/// Vector2::new(150.0, 150.0), Vector2::new(200.0, 200.0), /// Vector2::new(100.0, 200.0)];
+/// let pts = [
+///     Vector2::new(100.0, 100.0), Vector2::new(200.0, 100.0),
+///     Vector2::new(150.0, 150.0), Vector2::new(200.0, 200.0),
+///     Vector2::new(100.0, 200.0),
+/// ];
 /// draw_polygon_concave(&pts, RED);
 /// ```
-
 pub fn draw_polygon_concave(points: &[Vector2], thickness: f32, color: Color) {
     ctx(|s| s.draw_state.draw_polygon_concave(points, color))
 }
@@ -871,6 +1189,8 @@ pub fn load_font_from_bytes(bytes: &[u8]) -> Font {
     })
 }
 
+/// Draws a line from `(x1, y1)` to `(x2, y2)` with a triangular head at the end.
+/// The tip extends `head_size` past `(x2, y2)`.
 pub fn draw_arrow(
     x1: f32,
     y1: f32,
@@ -886,6 +1206,7 @@ pub fn draw_arrow(
     });
 }
 
+/// Returns the size of the monitor the window is on, or the window size if it can't be determined.
 pub fn screen_size() -> Vector2 {
     let win = get_window();
     match win.current_monitor() {
@@ -904,8 +1225,9 @@ pub fn screen_height() -> f32 {
     screen_size().y
 }
 
-/// # TEXTURES
+// -- TEXTURES --------------------------------------------------------------------------------------------------------------
 
+/// Creates an empty texture of the given size. Fill it with `update_texture`.
 pub fn create_empty_texture(width: u32, height: u32, filter_type: FilterType) -> Texture {
     ctx(|s| {
         let gpu = GpuTexture::empty(&s.device, width, height, filter_type)
@@ -919,6 +1241,7 @@ pub fn create_empty_texture(width: u32, height: u32, filter_type: FilterType) ->
     })
 }
 
+/// Loads a texture from an image file using linear filtering. Panics if the file can't be read or decoded.
 pub fn load_texture(path: &str) -> Texture {
     ctx(|s| {
         let image = image::load_from_memory(&std::fs::read(path).unwrap()).unwrap();
@@ -933,6 +1256,7 @@ pub fn load_texture(path: &str) -> Texture {
     })
 }
 
+/// Same as `load_texture`, with an explicit `FilterType` (e.g. nearest for pixel art).
 pub fn load_texture_with_filter_type(path: &str, filter_type: FilterType) -> Texture {
     ctx(|s| {
         let image = image::load_from_memory(&std::fs::read(path).unwrap()).unwrap();
@@ -947,6 +1271,7 @@ pub fn load_texture_with_filter_type(path: &str, filter_type: FilterType) -> Tex
     })
 }
 
+/// Loads a texture from encoded image bytes (e.g. `include_bytes!`) using linear filtering.
 pub fn load_texture_from_bytes(bytes: &[u8]) -> Texture {
     ctx(|s| {
         let image = image::load_from_memory(bytes).unwrap();
@@ -960,6 +1285,7 @@ pub fn load_texture_from_bytes(bytes: &[u8]) -> Texture {
     })
 }
 
+/// Loads a texture from raw RGBA `f32` pixels. `data.len()` must equal `width * height * 4`, otherwise this panics.
 pub fn load_texture_from_bytes_with_filter_type(bytes: &[u8], filter_type: FilterType) -> Texture {
     ctx(|s| {
         let image = image::load_from_memory(bytes).unwrap();
@@ -973,6 +1299,7 @@ pub fn load_texture_from_bytes_with_filter_type(bytes: &[u8], filter_type: Filte
     })
 }
 
+/// Loads a texture from raw RGBA `f32` pixels. `data.len()` must equal `width * height * 4`, otherwise this panics.
 pub fn load_texture_from_data(width: u32, height: u32, data: &[f32]) -> Texture {
     ctx(|s| {
         let img_buf = ImageBuffer::<Rgba<f32>, Vec<f32>>::from_raw(width, height, data.to_vec())
@@ -988,6 +1315,9 @@ pub fn load_texture_from_data(width: u32, height: u32, data: &[f32]) -> Texture 
     })
 }
 
+/// Loads a texture from raw RGBA `f32` pixels.
+/// `data.len()` must equal `width * height * 4`, otherwise this panics.
+/// (Use nearest for pixel art)
 pub fn load_texture_from_data_with_filter_type(
     width: u32,
     height: u32,
@@ -1008,6 +1338,7 @@ pub fn load_texture_from_data_with_filter_type(
     })
 }
 
+/// Creates a texture from an `Image`.
 pub fn load_texture_from_image(image: &Image) -> Texture {
     let tex = create_empty_texture(image.width, image.height, image.filter_type);
     update_texture(tex, image);
@@ -1015,14 +1346,19 @@ pub fn load_texture_from_image(image: &Image) -> Texture {
     tex
 }
 
-pub fn draw_texture_ex(texture: Texture, x: f32, y: f32, p: DrawTextureParams) {
-    ctx(|s| s.draw_state.draw_texture_ex(texture, x, y, p))
-}
-
+/// Draws a texture stretched to `w` x `h` with its top-left at `(x, y)`.
+/// `tint` multiplies the texture color (use `WHITE` for none).
 pub fn draw_texture(texture: Texture, x: f32, y: f32, w: f32, h: f32, tint: Color) {
     ctx(|s| s.draw_state.draw_texture(texture, x, y, w, h, tint))
 }
 
+/// Draws a texture with extra options from `DrawTextureParams`: destination size,
+/// source rect, horizontal/vertical flip, rotation (radians), pivot, and tint.
+pub fn draw_texture_ex(texture: Texture, x: f32, y: f32, p: DrawTextureParams) {
+    ctx(|s| s.draw_state.draw_texture_ex(texture, x, y, p))
+}
+
+/// Replaces the pixels of an existing texture with those from `image`.
 pub fn update_texture(texture: Texture, image: &Image) {
     ctx(|s| s.update_texture(texture.id, image))
 }

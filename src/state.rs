@@ -707,6 +707,7 @@ impl State {
 
     /// ## Window
 
+    #[inline(always)]
     pub fn get_window(&self) -> Arc<Window> {
         self.window.clone()
     }
@@ -755,6 +756,10 @@ impl State {
         let _ = self
             .window
             .request_inner_size(PhysicalSize::new(self.window.outer_size().width, h));
+    }
+    
+    pub fn set_window_size(&mut self, w: u32, h: u32) {
+        let _ = self.window.request_inner_size(PhysicalSize::new(w, h));
     }
 
     pub fn window_width(&self) -> f32 {

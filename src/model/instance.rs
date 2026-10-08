@@ -1,129 +1,86 @@
 use crate::draw_state::shapes::Shape;
 use crate::draw_state::shapes::color::Color;
-use cgmath::Vector2;
+use cgmath::{Vector2, Vector3, Vector4, Zero};
 
 pub(crate) const FULL_UV: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 
-#[derive(Clone, Debug)]
 pub(crate) struct Instance {
-    pub position: cgmath::Vector3<f32>,
-    pub rotation: cgmath::Quaternion<f32>,
+    pub position: Vector3<f32>,
+    pub rotation: f32, // radians
     pub size: Vector2<f32>,
+    pub radius: Vector4<f32>,
     pub color: Color,
     pub shape: Shape,
     pub tri_points: [Vector2<f32>; 3],
     pub uv_rect: [f32; 4],
 }
 
+impl Instance {
+    pub fn new(shape: Shape, x: f32, y: f32, w: f32, h: f32, color: Color) -> Self {
+        Self {
+            position: Vector3::new(x, y, 0.0),
+            rotation: 0.0,
+            size: Vector2::new(w, h),
+            radius: Vector4::zero(),
+            color,
+            shape,
+            tri_points: [Vector2::zero(); 3],
+            uv_rect: FULL_UV,
+        }
+    }
+
+    pub fn update_with_z_offset(mut self, z_offset: f32) -> Self {
+        self.position.z = z_offset;
+        self
+    }
+
+    pub fn to_raw(&self) -> InstanceRaw {
+        let c = self
+            .color
+            .to_array()
+            .map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
+        InstanceRaw {
+            pos: self.position.into(),
+            rotation: self.rotation,
+            size: self.size.into(),
+            radius: [
+                self.radius.x.clamp(0.0, self.size.x.min(self.size.y) * 0.5),
+                self.radius.y.clamp(0.0, self.size.x.min(self.size.y) * 0.5),
+                self.radius.z.clamp(0.0, self.size.x.min(self.size.y) * 0.5),
+                self.radius.w.clamp(0.0, self.size.x.min(self.size.y) * 0.5),
+            ],
+            color: c,
+            shape: self.shape as u32,
+            tri_points: self.tri_points.map(Into::into),
+            uv_rect: self.uv_rect,
+        }
+    }
+}
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct InstanceRaw {
-    model: [[f32; 4]; 4],
-    color: [f32; 4],
+    pos: [f32; 3],
+    rotation: f32,
+    size: [f32; 2],
+    radius: [f32; 4],
+    color: [u8; 4],
     shape: u32,
     tri_points: [[f32; 2]; 3],
     uv_rect: [f32; 4],
 }
 
-impl Instance {
-    pub fn update_with_z_offset(&mut self, z_offset: f32) -> &mut Self {
-        self.position.z += z_offset;
-        self
-    }
-
-    pub fn to_raw(&self) -> InstanceRaw {
-        InstanceRaw {
-            model: (cgmath::Matrix4::from_translation(self.position)
-                * cgmath::Matrix4::from(self.rotation)
-                * cgmath::Matrix4::from_nonuniform_scale(self.size.x, self.size.y, 1.0))
-            .into(),
-            color: self.color.to_array(),
-            shape: self.shape as u32,
-            tri_points: [
-                self.tri_points[0].into(),
-                self.tri_points[1].into(),
-                self.tri_points[2].into(),
-            ],
-            uv_rect: self.uv_rect,
-        }
-    }
-}
-
 impl InstanceRaw {
+    const ATTRS: [wgpu::VertexAttribute; 10] = wgpu::vertex_attr_array![
+        5 => Float32x3, 6 => Float32, 7 => Float32x2, 8 => Float32x4,
+        9 => Unorm8x4, 10 => Uint32,
+        11 => Float32x2, 12 => Float32x2, 13 => Float32x2,
+        14 => Float32x4,
+    ];
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
-            array_stride: size_of::<InstanceRaw>() as wgpu::BufferAddress,
-            // We need to switch from using a step mode of Vertex to Instance
-            // This means that our shaders will only change to use the next
-            // instance when the shader starts processing a new instance
+            array_stride: size_of::<Self>() as u64,
             step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[
-                // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a slot
-                // for each vec4. We'll have to reassemble the mat4 in the shader.
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    // While our vertex shader only uses locations 0, and 1 now, in later tutorials, we'll
-                    // be using 2, 3, and 4, for Vertex. We'll start at slot 5, not conflict with them later
-                    shader_location: 5,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                    shader_location: 6,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 7,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: size_of::<[f32; 12]>() as wgpu::BufferAddress,
-                    shader_location: 8,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                // Color
-                wgpu::VertexAttribute {
-                    offset: size_of::<[f32; 16]>() as wgpu::BufferAddress,
-                    shader_location: 9,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                // Shape
-                wgpu::VertexAttribute {
-                    offset: size_of::<[f32; 20]>() as wgpu::BufferAddress,
-                    shader_location: 10,
-                    format: wgpu::VertexFormat::Uint32,
-                },
-                // Tri point 0
-                wgpu::VertexAttribute {
-                    offset: size_of::<[f32; 20]>() as wgpu::BufferAddress
-                        + size_of::<u32>() as wgpu::BufferAddress,
-                    shader_location: 11,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-                // Tri point 1
-                wgpu::VertexAttribute {
-                    offset: size_of::<[f32; 20]>() as wgpu::BufferAddress
-                        + size_of::<u32>() as wgpu::BufferAddress
-                        + size_of::<[f32; 2]>() as wgpu::BufferAddress,
-                    shader_location: 12,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-                // Tri point 2
-                wgpu::VertexAttribute {
-                    offset: size_of::<[f32; 20]>() as wgpu::BufferAddress
-                        + size_of::<u32>() as wgpu::BufferAddress
-                        + size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                    shader_location: 13,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-                // UV Rect
-                wgpu::VertexAttribute {
-                    offset: std::mem::offset_of!(InstanceRaw, uv_rect) as wgpu::BufferAddress,
-                    shader_location: 14,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-            ],
+            attributes: &Self::ATTRS,
         }
     }
 }
