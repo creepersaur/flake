@@ -762,7 +762,7 @@ pub fn draw_rectangle_rounded_from_rect_ex(
 /// draw_rectangle_lines(100.0, 100.0, 50.0, 80.0, 4.0, WHITE);
 /// ```
 pub fn draw_rectangle_lines(x: f32, y: f32, w: f32, h: f32, thickness: f32, color: Color) {
-    draw_rectangle_lines_rounded(x, y, w, h, thickness, 0.0, color)
+    draw_rectangle_lines_rounded(x, y, w, h, 0.0, thickness, color)
 }
 
 /// Draws the outline of a rectangle using a `Rect`.
@@ -1084,7 +1084,7 @@ pub fn draw_poly_line_rounded(points: &[Vector2], thickness: f32, color: Color, 
 /// ];
 /// draw_polygon(&pts, GREEN);
 /// ```
-pub fn draw_polygon(points: &[Vector2], thickness: f32, color: Color) {
+pub fn draw_polygon(points: &[Vector2], color: Color) {
     ctx(|s| s.draw_state.draw_polygon(points, color))
 }
 
@@ -1101,7 +1101,7 @@ pub fn draw_polygon(points: &[Vector2], thickness: f32, color: Color) {
 /// ];
 /// draw_polygon_concave(&pts, RED);
 /// ```
-pub fn draw_polygon_concave(points: &[Vector2], thickness: f32, color: Color) {
+pub fn draw_polygon_concave(points: &[Vector2], color: Color) {
     ctx(|s| s.draw_state.draw_polygon_concave(points, color))
 }
 

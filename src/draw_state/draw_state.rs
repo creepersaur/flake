@@ -251,7 +251,7 @@ impl DrawState {
             grow(bottom_right),
             grow(bottom_left),
         );
-        i.tri_points[0] = vec2(thickness, 0.0); // thickness is in tri_points cus unused
+        i.tri_points[0] = vec2(thickness.max(0.0) + 1.0, 0.0); // thickness is in tri_points cus unused
 
         self.push_shape(Shape::Rectangle, i);
     }
@@ -315,13 +315,13 @@ impl DrawState {
         self.push_shape(
             Shape::Rectangle,
             Instance {
-                position: Vector3::new(top_left_pos.x, top_left_pos.y, 0.0),
-                size: vec2(w, h),
+                position: Vector3::new(top_left_pos.x - thickness/2.0, top_left_pos.y - thickness/2.0, 0.0),
+                size: vec2(w + thickness, h + thickness),
                 rotation,
                 radius: vec4(top_left, top_right, bottom_left, bottom_right),
                 color,
                 shape: Shape::Rectangle,
-                tri_points: [vec2(thickness, 0.0), Vector2::zero(), Vector2::zero()],
+                tri_points: [vec2(thickness.max(0.0) + 1.0, 0.0), Vector2::zero(), Vector2::zero()],
                 uv_rect: FULL_UV,
             },
         );

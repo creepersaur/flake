@@ -95,11 +95,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let d = sd_round_box(in.local, in.half_size, in.radius);
     let aa = max(fwidth(d), 1e-4);
 
-    var rect_alpha = clamp(0.5 - d / aa, 0.0, 1.0);                   // outer shape
-    if in.thickness > 0.0 {
-        rect_alpha -= clamp(0.5 - (d + in.thickness) / aa, 0.0, 1.0); // minus inner shape
+    let is_outline = in.thickness > 0.0;
+    let stroke = in.thickness - 1.0;
+
+    var rect_alpha = clamp(0.5 - d / aa, 0.0, 1.0);
+    if is_outline {
+        rect_alpha -= clamp(0.5 - (d + stroke) / aa, 0.0, 1.0);
     }
-    let is_sdf = any(in.radius > vec4<f32>(0.0)) || in.thickness > 0.0;
+    let is_sdf = any(in.radius > vec4<f32>(0.0)) || is_outline;
     rect_alpha = select(1.0, rect_alpha, is_sdf);
 
     let tex = textureSample(t_diffuse, s_diffuse, in.tex_uv);
