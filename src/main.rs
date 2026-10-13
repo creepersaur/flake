@@ -65,7 +65,7 @@ async fn main() {
         }
 
         // lean toward the mouse horizontally, max ~11 degrees
-        let tilt_target = nx * 0.1;
+        let tilt_target = nx * 0.05;
         tilt += (tilt_target - tilt) * (1.0 - (-10.0 * dt).exp());
 
         // rotated shapes use their center as (x, y)
@@ -75,6 +75,9 @@ async fn main() {
 
         draw_rectangle_rotated(cx, cy, 32.0, 32.0, tilt, RED.with_alpha(0.7));
         draw_rectangle_lines_rotated(cx, cy, 32.0, 32.0, tilt, 2.0, BLACK);
+        draw_rectangle_rotated(cx, cy + 8.0, 8.0, 2.0, tilt, BLACK);
+        draw_rectangle_rotated(cx - 4.0, cy + 8.0, 2.0, 4.0, tilt, BLACK);
+        draw_rectangle_rotated(cx + 4.0, cy + 8.0, 2.0, 4.0, tilt, BLACK);
 
         // eye centers relative to the body center
         for eox in [-6.5, 7.5] {
