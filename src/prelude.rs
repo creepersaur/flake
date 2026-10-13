@@ -24,6 +24,7 @@ use std::borrow::Borrow;
 use std::sync::Arc;
 pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
+use winit::platform::windows::WindowExtWindows;
 use winit::window::Window;
 pub use winit::window::{WindowButtons, WindowLevel};
 
@@ -118,6 +119,15 @@ pub fn set_window_level(level: WindowLevel) {
 /// (e.g. `WindowButtons::CLOSE` leaves only the close button).
 pub fn set_window_enabled_buttons(window_buttons: WindowButtons) {
     ctx(|s| s.get_window().set_enabled_buttons(window_buttons));
+}
+
+/// Sets whether the app is shown or not shown (skipped) in the taskbar
+pub fn set_skip_taskbar(skip: bool) {
+    if STATE.get().is_some() {
+        return ctx(|s| s.window.set_skip_taskbar(skip));
+    }
+
+    PENDING_CONFIG.with_borrow_mut(|s| s.skip_taskbar = Some(skip));
 }
 
 /// Sets whether the window is transparent.

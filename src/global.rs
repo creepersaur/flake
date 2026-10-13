@@ -20,6 +20,7 @@ pub struct PendingConfig {
     pub window_level: Option<WindowLevel>,
     pub window_icon: Option<(Vec<u8>, u32, u32)>,
     pub window_clear_color: Option<Color>,
+    pub skip_taskbar: Option<bool>,
 
     pub fps_capped: Option<bool>,
     pub target_fps: Option<usize>,

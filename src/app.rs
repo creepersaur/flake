@@ -7,6 +7,7 @@ use winit::dpi::PhysicalSize;
 use winit::event::{KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::PhysicalKey;
+use winit::platform::windows::WindowExtWindows;
 use winit::window::{Icon, Window, WindowId};
 
 pub struct App {
@@ -75,6 +76,7 @@ impl ApplicationHandler<State> for App {
             
             self.set_state_prop(s.window_x, |value, state| state.set_window_x(*value));
             self.set_state_prop(s.window_y, |value, state| state.set_window_y(*value));
+            self.set_state_prop(s.skip_taskbar, |value, _| window.set_skip_taskbar(*value));
             self.set_state_prop(s.window_passthrough, |value, state| {
                 state.set_window_passthrough(*value)
             });
@@ -95,9 +97,10 @@ impl ApplicationHandler<State> for App {
                 .for_each(|x| self.state.as_mut().unwrap().add_timer(x.clone()))
         });
 
-        self.state.as_mut().unwrap().task = self.task.take();
-        self.state.as_mut().unwrap().initialize_state();
-        
+        let state = self.state.as_mut().unwrap();
+        state.task = self.task.take();
+        state.initialize_state();
+
         window.set_visible(true);
     }
 

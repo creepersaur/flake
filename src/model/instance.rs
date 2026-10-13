@@ -56,6 +56,7 @@ impl Instance {
         }
     }
 }
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct InstanceRaw {
