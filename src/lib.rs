@@ -4,7 +4,7 @@
 //! games and apps very easily.
 
 use crate::app::App;
-use crate::prelude::{clear_background, Color};
+use crate::prelude::{clear_background, Color, next_frame};
 pub use flake_macros::main as flake;
 
 mod app;
@@ -28,4 +28,9 @@ pub fn run_async(fut: impl Future<Output = ()> + 'static) -> FlakeResult {
 pub fn run_with_bg(color: Color, fut: impl Future<Output = ()> + 'static) -> FlakeResult {
     clear_background(color);
     run_async(fut)
+}
+
+#[macro_export]
+macro_rules! end_frame {
+    () => {next_frame().await};
 }

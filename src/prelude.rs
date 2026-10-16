@@ -3,6 +3,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 use crate::draw_state::shapes::Shape;
+pub use crate::end_frame;
 pub use crate::draw_state::shapes::color::*;
 use crate::global::{PENDING_CONFIG, STATE, ctx};
 pub use crate::misc::flake_image::Image;
