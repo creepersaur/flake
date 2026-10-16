@@ -1,89 +1,197 @@
 use flake::prelude::*;
 
-#[flake(skip_taskbar = true)]
-async fn main() {
-    let screensize = screen_size();
-    set_window_size(screensize.x as u32 - 1, screensize.y as u32 - 1);
-    set_window_position(0, 0);
-    set_window_decorations(false);
-    set_window_passthrough(true);
-    set_window_level(WindowLevel::AlwaysOnTop);
+const GRAVITY: f32 = 900.0;
+const RESTITUTION: f32 = 0.5;
+const SUBSTEPS: usize = 4;
 
-    let (mut px, mut py) = (200.0_f32, 200.0_f32);
-    let mut t = 0.0_f32;
-    let mut walk = 0.0_f32; // 0 = idle, 1 = full walk (eased)
-    let mut facing = 1.0_f32; // smoothed: +1 right, -1 left
-    let mut face_target = 1.0_f32;
-    let mut tilt = 0.0_f32;
+struct Block {
+    rect: Rect,
+    angle: f32,
+}
+
+struct Ball {
+    pos: Vector2,
+    vel: Vector2,
+    r: f32,
+}
+
+/// Circle vs OBB. Returns (normal pointing from box to circle, penetration depth).
+fn circle_vs_obb(c: Vector2, r: f32, b: &Rect, angle: f32) -> Option<(Vector2, f32)> {
+    let (s, co) = angle.sin_cos();
+    let d = c - b.center();
+    // into the box's local space
+    let local = vec2(d.x * co + d.y * s, -d.x * s + d.y * co);
+    let h = b.size() * 0.5;
+
+    let closest = vec2(local.x.clamp(-h.x, h.x), local.y.clamp(-h.y, h.y));
+    let diff = local - closest;
+    let dist2 = diff.x * diff.x + diff.y * diff.y;
+
+    let (n_local, pen) = if dist2 > 1e-8 {
+        if dist2 >= r * r {
+            return None;
+        }
+        let dist = dist2.sqrt();
+        (diff / dist, r - dist)
+    } else {
+        // center is inside the box: push out through the nearest face
+        let dx = h.x - local.x.abs();
+        let dy = h.y - local.y.abs();
+        if dx < dy {
+            (vec2(if local.x >= 0.0 { 1.0 } else { -1.0 }, 0.0), dx + r)
+        } else {
+            (vec2(0.0, if local.y >= 0.0 { 1.0 } else { -1.0 }), dy + r)
+        }
+    };
+
+    // back to world space
+    let n = vec2(n_local.x * co - n_local.y * s, n_local.x * s + n_local.y * co);
+    Some((n, pen))
+}
+
+#[flake]
+async fn main() {
+    let mut ground = vec![
+        Block { rect: rect(0.0, 500.0, 800.0, 100.0), angle: 0.0 },
+        Block { rect: rect(300.0, 430.0, 200.0, 20.0), angle: -0.4 },
+    ];
+    let mut balls: Vec<Ball> = Vec::new();
+    let mut spawned = 0;
+
+    let mut drag: Option<Vector2> = None;
+    let mut drag_angle = 0.0_f32;
+    let mut head: Vec<i32> = vec![-1; 64 * 48];
+    let mut next: Vec<i32> = Vec::new();
 
     loop {
-        clear_background(TRANSPARENT);
-        let dt = get_frame_time();
+        clear_background(BLACK);
+        let dt = get_frame_time().min(1.0 / 30.0);
 
-        let (mx, my) = mouse_screen_position();
-        let (mx, my) = (mx as f32, my as f32);
+        draw_text(&format!("FPS: {}", get_fps()), 10.0, 10.0, 16.0, None, WHITE);
+        draw_text(&format!("balls: {spawned}"), 10.0, 26.0, 16.0, None, WHITE);
 
-        let (dx, dy) = (mx - px, my - py);
-        let dist = (dx * dx + dy * dy).sqrt().max(0.001);
-        let (nx, ny) = (dx / dist, dy / dist);
-
-        // Ease toward the current direction (frame-rate independent)
-        if nx.abs() > 0.2 {
-            face_target = nx.signum();
-        }
-        facing += (face_target - facing) * (1.0 - (-15.0 * dt).exp());
-
-        let (tx, ty) = (mx - nx * 80.0, my - ny * 80.0);
-        let moving = dist > 90.0;
-        let speed = ((dist - 90.0) / 510.0).clamp(0.0, 1.0);
-
-        if moving {
-            let k = 1.0 - (-5.0 * dt).exp();
-            px += (tx - px) * k;
-            py += (ty - py) * k;
-            t += dt * (10.0 + speed * 20.0);
+        // SPAWN (hold right click)
+        for _ in 0..20 {
+            if is_mouse_button_down(MouseButton::Right) {
+                let p = mouse_position_vec2();
+                let r = 8.0 + (spawned % 5) as f32 * 4.0;
+                // tiny x offset so stacked balls don't spawn perfectly aligned
+                let jitter = (spawned % 7) as f32 - 3.0;
+                balls.push(Ball { pos: p + vec2(jitter, 0.0), vel: vec2(0.0, 0.0), r: r * 0.3 });
+                spawned += 1;
+            }
         }
 
-        // Ease walk amount in/out (frame-rate independent)
-        let target = if moving { 1.0 } else { 0.0 };
-        walk += (target - walk) * (1.0 - (-12.0 * dt).exp());
+        // PHYSICS
+        let sdt = dt / SUBSTEPS as f32;
+        for _ in 0..SUBSTEPS {
+            for b in balls.iter_mut() {
+                b.vel.y += GRAVITY * sdt;
+                b.pos += b.vel * sdt;
+            }
 
-        // Body: bounces once per step (twice per cycle), highest when legs are under it
-        let bob = -t.cos().abs() * 6.0 * walk;
-        let (x, y0) = (px - 16.0, py - 16.0);
-        let y = y0 + bob;
+            // balls vs blocks
+            for b in balls.iter_mut() {
+                for block in &ground {
+                    if let Some((n, pen)) = circle_vs_obb(b.pos, b.r, &block.rect, block.angle) {
+                        b.pos += n * pen;
+                        let vn = b.vel.dot(n);
+                        if vn < 0.0 {
+                            b.vel -= n * (vn * (1.0 + RESTITUTION));
+                        }
+                    }
+                }
+            }
 
-        // Feet: opposite phases (PI apart). Feet stay on the ground, not on the bob.
-        let stride = (4.0 + speed * 3.0) * walk * facing;
-        let lift_h = (3.0 + speed * 2.0) * walk;
-        for (fx, phase) in [(x + 4.0, 0.0), (x + 20.0, std::f32::consts::PI)] {
-            let p = t + phase;
-            let off = p.sin() * stride;               // slide back/forward
-            let lift = p.cos().max(0.0) * lift_h;     // lifted only while swinging forward
-            draw_rectangle(fx + off, y0 + 30.0 - lift, 8.0, 8.0, RED.with_alpha(0.7));
-            draw_rectangle_lines(fx + off, y0 + 30.0 - lift, 8.0, 8.0, 2.0, BLACK);
+            // balls vs balls (uniform grid)
+            const CELL: f32 = 48.0; // >= largest ball diameter (max r is 24)
+            const GW: usize = 64;
+            const GH: usize = 48;
+
+            let cell_of = |p: Vector2| -> (i32, i32) {
+                (
+                    ((p.x / CELL) as i32).clamp(0, GW as i32 - 1),
+                    ((p.y / CELL) as i32).clamp(0, GH as i32 - 1),
+                )
+            };
+
+            head.fill(-1);
+            next.resize(balls.len(), -1);
+            for (i, b) in balls.iter().enumerate() {
+                let (cx, cy) = cell_of(b.pos);
+                let c = cy as usize * GW + cx as usize;
+                next[i] = head[c];
+                head[c] = i as i32;
+            }
+
+            for i in 0..balls.len() {
+                let (cx, cy) = cell_of(balls[i].pos);
+                for ny in (cy - 1).max(0)..=(cy + 1).min(GH as i32 - 1) {
+                    for nx in (cx - 1).max(0)..=(cx + 1).min(GW as i32 - 1) {
+                        let mut j = head[ny as usize * GW + nx as usize];
+                        while j >= 0 {
+                            let ju = j as usize;
+                            if ju > i {
+                                let d = balls[ju].pos - balls[i].pos;
+                                let dist = (d.x * d.x + d.y * d.y).sqrt();
+                                let min = balls[i].r + balls[ju].r;
+                                if dist < min && dist > 1e-6 {
+                                    let n = d / dist;
+                                    let pen = min - dist;
+                                    let (mi, mj) = (balls[i].r * balls[i].r, balls[ju].r * balls[ju].r);
+                                    let total = mi + mj;
+
+                                    balls[i].pos -= n * (pen * mj / total);
+                                    balls[ju].pos += n * (pen * mi / total);
+
+                                    let vn = (balls[ju].vel - balls[i].vel).dot(n);
+                                    if vn < 0.0 {
+                                        let imp = -(1.0 + RESTITUTION) * vn / (1.0 / mi + 1.0 / mj);
+                                        balls[i].vel -= n * (imp / mi);
+                                        balls[ju].vel += n * (imp / mj);
+                                    }
+                                }
+                            }
+                            j = next[ju];
+                        }
+                    }
+                }
+            }
         }
 
-        // lean toward the mouse horizontally, max ~11 degrees
-        let tilt_target = nx * 0.05;
-        tilt += (tilt_target - tilt) * (1.0 - (-10.0 * dt).exp());
+        // drop balls that fell off the world
+        balls.retain(|b| b.pos.y < 2000.0);
 
-        // rotated shapes use their center as (x, y)
-        let (cx, cy) = (x + 16.0, y + 16.0);
-        let (s, c) = tilt.sin_cos();
-        let rot = |ox: f32, oy: f32| (cx + ox * c - oy * s, cy + ox * s + oy * c);
+        // BLOCK DRAGGING (Q / E rotate)
+        if is_mouse_button_pressed(MouseButton::Left) {
+            drag = Some(mouse_position_vec2());
+            drag_angle = 0.0;
+        }
+        if drag.is_some() {
+            drag_angle += 2.0 * dt * get_axis(KeyCode::KeyQ, KeyCode::KeyE);
+        }
+        if is_mouse_button_released(MouseButton::Left) {
+            if let Some(start) = drag {
+                ground.push(Block {
+                    rect: Rect::from_corners(start, mouse_position_vec2()),
+                    angle: drag_angle,
+                });
+                drag = None;
+            }
+        }
 
-        draw_rectangle_rotated(cx, cy, 32.0, 32.0, tilt, RED.with_alpha(0.7));
-        draw_rectangle_lines_rotated(cx, cy, 32.0, 32.0, tilt, 2.0, BLACK);
-        draw_rectangle_rotated(cx, cy + 8.0, 8.0, 2.0, tilt, BLACK);
-        draw_rectangle_rotated(cx - 4.0, cy + 8.0, 2.0, 4.0, tilt, BLACK);
-        draw_rectangle_rotated(cx + 4.0, cy + 8.0, 2.0, 4.0, tilt, BLACK);
-
-        // eye centers relative to the body center
-        for eox in [-6.5, 7.5] {
-            let (ex, ey) = rot(eox, -4.5);
-            draw_rectangle_rotated(ex, ey - eox / 7.0, 7.0, 7.0, tilt, WHITE);
-            draw_rectangle_rotated(ex + nx * 2.0, ey + ny * 2.0 - eox / 7.0, 3.0, 3.0, tilt, BLACK);
+        // DRAWING
+        for b in &balls {
+            draw_circle(b.pos.x, b.pos.y, b.r, RED);
+        }
+        for block in &ground {
+            block.rect.draw_lines_rotated(block.angle, 1.0, GREEN);
+            block.rect.draw_rotated(block.angle, GREEN.with_alpha(0.5));
+        }
+        if let Some(start) = drag {
+            let preview = Rect::from_corners(start, mouse_position_vec2());
+            preview.draw_lines_rotated(drag_angle, 1.0, LIGHT_BLUE);
+            preview.draw_rotated(drag_angle, BLUE.with_alpha(0.05));
         }
 
         next_frame().await

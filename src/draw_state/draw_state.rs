@@ -193,16 +193,25 @@ impl DrawState {
 
     pub fn draw_rectangle(
         &mut self,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
+        mut x: f32,
+        mut y: f32,
+        mut w: f32,
+        mut h: f32,
         top_left: f32,
         top_right: f32,
         bottom_left: f32,
         bottom_right: f32,
         color: Color,
     ) {
+        if w < 0.0 {
+            x += w;
+            w = -w;
+        }
+        if h < 0.0 {
+            y += h;
+            h = -h;
+        }
+
         self.push_shape(
             Shape::Rectangle,
             Instance {
@@ -220,10 +229,10 @@ impl DrawState {
 
     pub fn draw_rectangle_lines(
         &mut self,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
+        mut x: f32,
+        mut y: f32,
+        mut w: f32,
+        mut h: f32,
         top_left: f32,
         top_right: f32,
         bottom_left: f32,
@@ -231,8 +240,17 @@ impl DrawState {
         thickness: f32,
         color: Color,
     ) {
-        let half = thickness * 0.5;
+        if w < 0.0 {
+            x += w;
+            w = -w;
+        }
+        if h < 0.0 {
+            y += h;
+            h = -h;
+        }
+
         // Sharp corners stay sharp rounded ones grow so the stroke is centered on the edge.
+        let half = thickness * 0.5;
         let grow = |r: f32| if r > 0.0 { r + half } else { 0.0 };
 
         let mut i = Instance::new(
@@ -315,13 +333,21 @@ impl DrawState {
         self.push_shape(
             Shape::Rectangle,
             Instance {
-                position: Vector3::new(top_left_pos.x - thickness/2.0, top_left_pos.y - thickness/2.0, 0.0),
+                position: Vector3::new(
+                    top_left_pos.x - thickness / 2.0,
+                    top_left_pos.y - thickness / 2.0,
+                    0.0,
+                ),
                 size: vec2(w + thickness, h + thickness),
                 rotation,
                 radius: vec4(top_left, top_right, bottom_left, bottom_right),
                 color,
                 shape: Shape::Rectangle,
-                tri_points: [vec2(thickness.max(0.0) + 1.0, 0.0), Vector2::zero(), Vector2::zero()],
+                tri_points: [
+                    vec2(thickness.max(0.0) + 1.0, 0.0),
+                    Vector2::zero(),
+                    Vector2::zero(),
+                ],
                 uv_rect: FULL_UV,
             },
         );

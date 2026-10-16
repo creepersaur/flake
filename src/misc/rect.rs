@@ -1,4 +1,10 @@
-use crate::prelude::{draw_rectangle_from_rect, draw_rectangle_lines_from_rect, draw_rectangle_rounded_from_rect, draw_rectangle_rounded_from_rect_ex, mouse_position_vec2, Color, Vector2, draw_rectangle_lines_rounded_from_rect, draw_rectangle_lines_rounded_from_rect_ex};
+use crate::prelude::{
+    Color, Vector2, draw_line, draw_rectangle_from_rect, draw_rectangle_lines_from_rect,
+    draw_rectangle_lines_rounded_from_rect, draw_rectangle_lines_rounded_from_rect_ex,
+    draw_rectangle_rotated, draw_rectangle_rounded_from_rect, draw_rectangle_rounded_from_rect_ex,
+    mouse_position_vec2,
+};
+use cgmath::vec2;
 
 /// # Rect
 /// Contains the position (x, y) and size (width, height) of a rectangle.
@@ -67,20 +73,46 @@ impl Rect {
 
     // --- Points ---
     pub const fn top_left(&self) -> Vector2 {
-        Vector2::new(self.x, self.y)
+        vec2(self.x, self.y)
     }
     pub const fn top_right(&self) -> Vector2 {
-        Vector2::new(self.x + self.w, self.y)
+        vec2(self.x + self.w, self.y)
     }
     pub const fn bottom_left(&self) -> Vector2 {
-        Vector2::new(self.x, self.y + self.h)
+        vec2(self.x, self.y + self.h)
     }
     pub const fn bottom_right(&self) -> Vector2 {
-        Vector2::new(self.x + self.w, self.y + self.h)
+        vec2(self.x + self.w, self.y + self.h)
+    }
+    pub const fn xy(&self) -> Vector2 {
+        vec2(self.x, self.y)
+    }
+    pub const fn wh(&self) -> Vector2 {
+        vec2(self.w, self.h)
+    }
+    pub const fn xw(&self) -> Vector2 {
+        vec2(self.x, self.w)
+    }
+    pub const fn xh(&self) -> Vector2 {
+        vec2(self.x, self.h)
+    }
+    pub const fn yw(&self) -> Vector2 {
+        vec2(self.y, self.w)
+    }
+    pub const fn yh(&self) -> Vector2 {
+        vec2(self.y, self.h)
     }
 
+    pub fn corners(&self) -> [Vector2; 4] {
+        [
+            self.top_left(),
+            self.top_right(),
+            self.bottom_left(),
+            self.bottom_right(),
+        ]
+    }
     pub fn center(&self) -> Vector2 {
-        Vector2::new(self.x + self.w / 2.0, self.y + self.h / 2.0)
+        vec2(self.x + self.w / 2.0, self.y + self.h / 2.0)
     }
 
     // --- Measurements ---
@@ -91,10 +123,10 @@ impl Rect {
         2.0 * (self.w + self.h)
     }
     pub const fn size(&self) -> Vector2 {
-        Vector2::new(self.w, self.h)
+        vec2(self.w, self.h)
     }
     pub const fn position(&self) -> Vector2 {
-        Vector2::new(self.x, self.y)
+        vec2(self.x, self.y)
     }
 
     // --- Builders (non-mutating, return new Rect) ---
@@ -122,6 +154,18 @@ impl Rect {
     /// Get a new Rect with the specified position
     pub fn with_position_xy(&self, x: f32, y: f32) -> Self {
         Self::new(x, y, self.w, self.h)
+    }
+
+    /// Changes the position relatively by an offset Vector2.
+    pub fn change_position_by(&mut self, offset: Vector2) {
+        self.x += offset.x;
+        self.y += offset.y;
+    }
+
+    /// Changes the size relatively by an offset Vector2.
+    pub fn change_size_by(&mut self, offset: Vector2) {
+        self.w += offset.x;
+        self.h += offset.y;
     }
 
     /// Get a new Rect with the specified size
@@ -171,7 +215,7 @@ impl Rect {
 
     /// Clamp a point to lie within this rect
     pub fn clamp_point(&self, point: Vector2) -> Vector2 {
-        Vector2::new(
+        vec2(
             point.x.clamp(self.left(), self.right()),
             point.y.clamp(self.top(), self.bottom()),
         )
@@ -245,7 +289,7 @@ impl Rect {
     }
 
     /// Returns the overlapping region, or `None` if they don't intersect
-    pub const fn intersection(&self, other: &Rect) -> Option<Rect> {
+    pub const fn intersection(&self, other: Rect) -> Option<Rect> {
         let x1 = self.x.max(other.x);
         let y1 = self.y.max(other.y);
         let x2 = (self.x + self.w).min(other.x + other.w);
@@ -304,7 +348,6 @@ impl Rect {
         draw_rectangle_lines_from_rect(*self, thickness, color);
     }
 
-
     pub fn draw_lines_rounded(&self, radius: f32, thickness: f32, color: Color) {
         draw_rectangle_lines_rounded_from_rect(*self, radius, thickness, color);
     }
@@ -333,5 +376,113 @@ impl Rect {
 impl Into<[f32; 4]> for Rect {
     fn into(self) -> [f32; 4] {
         self.to_array()
+    }
+}
+
+// -- OBB ----------------------------------------
+
+impl Rect {
+    /// Pushes `self` out of an axis-aligned `other`.
+    /// Returns the collision normal (direction `self` was pushed), or `None`.
+    pub fn resolve_collision(&mut self, other: Rect) -> Option<Vector2> {
+        let c = self.intersection(other)?;
+        let (sc, oc) = (self.center(), other.center());
+
+        if c.w < c.h {
+            let dir = if sc.x < oc.x { -1.0 } else { 1.0 };
+            self.x += c.w * dir;
+            Some(vec2(dir, 0.0))
+        } else {
+            let dir = if sc.y < oc.y { -1.0 } else { 1.0 };
+            self.y += c.h * dir;
+            Some(vec2(0.0, dir))
+        }
+    }
+
+    /// Pushes `self` out of a rotated `other` (SAT).
+    /// Returns the collision normal (direction `self` was pushed), or `None`.
+    pub fn resolve_collision_obb(
+        &mut self,
+        angle: f32,
+        other: &Rect,
+        other_angle: f32,
+    ) -> Option<Vector2> {
+        let mtv = self.intersection_obb(angle, other, other_angle)?;
+        let len = (mtv.x * mtv.x + mtv.y * mtv.y).sqrt();
+        if len <= f32::EPSILON {
+            return None;
+        }
+        self.change_position_by(mtv);
+        Some(mtv / len)
+    }
+
+    /// OBB vs OBB collision (SAT). Angles are in radians, each rect rotates around its own center.
+    /// Returns the minimum translation vector that pushes `self` out of `other`, or `None` if not colliding.
+    pub fn intersection_obb(&self, angle: f32, other: &Rect, other_angle: f32) -> Option<Vector2> {
+        let dot = |a: Vector2, b: Vector2| a.x * b.x + a.y * b.y;
+        let axes = |a: f32| {
+            let (s, c) = a.sin_cos();
+            [vec2(c, s), vec2(-s, c)]
+        };
+
+        let a_axes = axes(angle);
+        let b_axes = axes(other_angle);
+        let (ha, hb) = (self.size() * 0.5, other.size() * 0.5);
+        let d = other.center() - self.center();
+
+        let mut min_overlap = f32::MAX;
+        let mut mtv = vec2(0.0, 0.0);
+
+        for n in a_axes.iter().chain(b_axes.iter()) {
+            let n = *n;
+
+            // Projected half-extent of each box onto this axis
+            let ra = ha.x * dot(a_axes[0], n).abs() + ha.y * dot(a_axes[1], n).abs();
+            let rb = hb.x * dot(b_axes[0], n).abs() + hb.y * dot(b_axes[1], n).abs();
+
+            let dist = dot(d, n);
+            let overlap = ra + rb - dist.abs();
+
+            if overlap <= 0.0 {
+                return None; // separating axis found
+            }
+
+            if overlap < min_overlap {
+                min_overlap = overlap;
+                let sign = if dist > 0.0 { -1.0 } else { 1.0 };
+                mtv = n * (sign * overlap);
+            }
+        }
+
+        Some(mtv)
+    }
+
+    /// Bool-only OBB overlap test
+    pub fn intersects_obb(&self, angle: f32, other: &Rect, other_angle: f32) -> bool {
+        self.intersection_obb(angle, other, other_angle).is_some()
+    }
+
+    /// Corners of the rect rotated by `angle` (radians) around its center
+    pub fn corners_by_angle(&self, angle: f32) -> [Vector2; 4] {
+        let c = self.center();
+        let (s, co) = angle.sin_cos();
+        let (hw, hh) = (self.w / 2.0, self.h / 2.0);
+        [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)]
+            .map(|(x, y)| vec2(c.x + x * co - y * s, c.y + x * s + y * co))
+    }
+
+    /// Draw the Rect rotated by `angle` (radians) around its center
+    pub fn draw_rotated(&self, angle: f32, color: Color) {
+        let c = self.center();
+        draw_rectangle_rotated(c.x, c.y, self.w, self.h, angle, color);
+    }
+
+    /// Draw the rotated Rect's outline
+    pub fn draw_lines_rotated(&self, angle: f32, thickness: f32, color: Color) {
+        let c = self.corners_by_angle(angle);
+        for i in 0..4 {
+            let (a, b) = (c[i], c[(i + 1) % 4]);
+            draw_line(a.x, a.y, b.x, b.y, thickness, color);
+        }
     }
 }
