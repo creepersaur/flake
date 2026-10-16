@@ -4,7 +4,7 @@
 //! games and apps very easily.
 
 use crate::app::App;
-use crate::prelude::{clear_background, Color};
+use crate::prelude::{clear_background, Color, next_frame};
 pub use flake_macros::main as flake;
 
 mod app;
