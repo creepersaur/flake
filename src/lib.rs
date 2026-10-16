@@ -29,3 +29,8 @@ pub fn run_with_bg(color: Color, fut: impl Future<Output = ()> + 'static) -> Fla
     clear_background(color);
     run_async(fut)
 }
+
+#[macro_export]
+macro_rules! end_frame {
+    () => {next_frame().await};
+}
