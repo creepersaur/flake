@@ -6,7 +6,7 @@ use crate::camera::{Camera, CameraUniform};
 use crate::draw_state::draw_state::DrawState;
 use crate::global::STATE;
 use crate::input::{keyboard::KeyboardState, mouse::MouseState};
-use crate::misc::font::Font;
+use crate::misc::font::Font as FlakeFont;
 use crate::misc::timer::Timer;
 use crate::model::instance::InstanceRaw;
 use crate::model::texture::{GpuTexture, TextureEntry};
@@ -21,13 +21,18 @@ use std::sync::Arc;
 use std::task::{Context, Waker};
 use std::time::Instant;
 use wgpu::{self, util::DeviceExt, *};
-use wgpu_text::glyph_brush::ab_glyph::FontVec;
+use wgpu_text::glyph_brush::ab_glyph::{Font, FontVec, PxScale, ScaleFont};
 use wgpu_text::{BrushBuilder, TextBrush};
 use winit::dpi::PhysicalSize;
 use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::{Window, WindowLevel};
+
+struct TextSlot {
+    brush: TextBrush<FontVec>,
+    size: (u32, u32),
+}
 
 pub struct State {
     // Window, Surface & Device
@@ -54,8 +59,9 @@ pub struct State {
     pub draw_state: DrawState,
 
     // Text
-    pub fonts: Vec<Font>,
-    text_brush: TextBrush<FontVec>,
+    pub fonts: Vec<FlakeFont>,
+    metric_fonts: Vec<FontVec>,
+    text_pool: Vec<Option<TextSlot>>,
 
     // Camera
     camera: Camera2D,
@@ -114,21 +120,6 @@ impl State {
         let msaa_view = Self::create_msaa_view(&device, &config, config.width, config.height);
 
         let draw_state = DrawState::new(&device);
-        let text_brush_builder = BrushBuilder::using_fonts(vec![])
-            .with_multisample(MultisampleState {
-                count: 4,
-                mask: !0,
-                alpha_to_coverage_enabled: true,
-            })
-            .with_depth_stencil(Some(DepthStencilState {
-                format: GpuTexture::DEPTH_FORMAT,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(CompareFunction::Always),
-                stencil: StencilState::default(),
-                bias: DepthBiasState::default(),
-            }));
-        let text_brush =
-            text_brush_builder.build(&device, config.width, config.height, config.format);
 
         Ok(Self {
             running: true,
@@ -151,7 +142,8 @@ impl State {
             draw_state,
 
             fonts: Vec::with_capacity(10),
-            text_brush,
+            metric_fonts: Vec::new(),
+            text_pool: Vec::new(),
 
             camera,
             camera_uniform,
@@ -450,18 +442,22 @@ impl State {
         }
     }
 
-    fn rebuild_text_brush(&mut self) {
-        let fonts = self
-            .fonts
+    fn build_text_brush(
+        device: &Device,
+        fonts: &[FlakeFont],
+        (w, h): (u32, u32),
+        format: TextureFormat,
+    ) -> TextBrush<FontVec> {
+        let fonts: Vec<FontVec> = fonts
             .iter()
             .map(|s| FontVec::try_from_vec(s.data.to_vec()).expect("Invalid font data"))
             .collect();
 
-        let text_brush_builder = BrushBuilder::using_fonts(fonts)
+        BrushBuilder::using_fonts(fonts)
             .with_multisample(MultisampleState {
                 count: 4,
                 mask: !0,
-                alpha_to_coverage_enabled: true,
+                alpha_to_coverage_enabled: false,
             })
             .with_depth_stencil(Some(DepthStencilState {
                 format: GpuTexture::DEPTH_FORMAT,
@@ -469,14 +465,12 @@ impl State {
                 depth_compare: Some(CompareFunction::Always),
                 stencil: StencilState::default(),
                 bias: DepthBiasState::default(),
-            }));
+            }))
+            .build(device, w, h, format)
+    }
 
-        self.text_brush = text_brush_builder.build(
-            &self.device,
-            self.config.width,
-            self.config.height,
-            self.config.format,
-        );
+    fn rebuild_text_brush(&mut self) {
+        self.text_pool.clear();
     }
 
     fn get_render_pipeline(
@@ -549,11 +543,6 @@ impl State {
         self.surface.configure(&self.device, &self.config);
         self.is_surface_configured = true;
 
-        self.text_brush.resize_view(
-            self.config.width as f32,
-            self.config.height as f32,
-            &self.queue,
-        );
         self.msaa_view = Self::create_msaa_view(
             &self.device,
             &self.config,
@@ -677,16 +666,47 @@ impl State {
             });
 
         {
-            self.draw_state
-                .upload(&self.device, &self.queue, &mut self.text_brush)?;
+            self.draw_state.upload_shapes(&self.device, &self.queue);
 
             let segments = self.draw_state.segments();
-            let last_screen = segments.iter().rposition(|s| s.target.is_none());
+
+            for i in 0..self.draw_state.segments().len() {
+                if !self.draw_state.segment_has_text(i) {
+                    continue;
+                }
+                let size = match &self.draw_state.segments()[i].target {
+                    Some(rt) => (rt.texture.width, rt.texture.height),
+                    None => (self.config.width, self.config.height),
+                };
+
+                if self.text_pool.len() <= i {
+                    self.text_pool.resize_with(i + 1, || None);
+                }
+                let slot = self.text_pool[i].get_or_insert_with(|| TextSlot {
+                    brush: Self::build_text_brush(
+                        &self.device,
+                        &self.fonts,
+                        size,
+                        self.config.format,
+                    ),
+                    size,
+                });
+                if slot.size != size {
+                    slot.brush
+                        .resize_view(size.0 as f32, size.1 as f32, &self.queue);
+                    slot.size = size;
+                }
+                self.draw_state
+                    .upload_text(&self.device, &self.queue, &mut slot.brush, i)?;
+            }
+
             let mut screen_cleared = false;
             let mut rt_cleared: Vec<usize> = Vec::new();
 
             for (i, seg) in segments.iter().enumerate() {
-                let end = segments.get(i + 1).map_or(self.draw_state.batch_count(), |n| n.first_batch);
+                let end = segments
+                    .get(i + 1)
+                    .map_or(self.draw_state.batch_count(), |n| n.first_batch);
 
                 let cam_bg = match seg.camera {
                     Some(slot) => &self.cam_pool[slot].1,
@@ -701,7 +721,12 @@ impl State {
                             rt_cleared.push(rt.texture.id);
                             LoadOp::Clear(Color::TRANSPARENT)
                         };
-                        (&rt.msaa_view, &self.textures[rt.texture.id].gpu.view, &rt.depth.view, load)
+                        (
+                            &rt.msaa_view,
+                            &self.textures[rt.texture.id].gpu.view,
+                            &rt.depth.view,
+                            load,
+                        )
                     }
                     None => {
                         let load = match (screen_cleared, self.clear_color) {
@@ -719,11 +744,17 @@ impl State {
                         view: msaa,
                         resolve_target: Some(resolve),
                         depth_slice: None,
-                        ops: Operations { load, store: StoreOp::Store },
+                        ops: Operations {
+                            load,
+                            store: StoreOp::Store,
+                        },
                     })],
                     depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                         view: depth,
-                        depth_ops: Some(Operations { load: LoadOp::Clear(1.0), store: StoreOp::Store }),
+                        depth_ops: Some(Operations {
+                            load: LoadOp::Clear(1.0),
+                            store: StoreOp::Store,
+                        }),
                         stencil_ops: None,
                     }),
                     ..Default::default()
@@ -731,11 +762,14 @@ impl State {
 
                 pass.set_pipeline(&self.render_pipeline);
                 pass.set_bind_group(0, cam_bg, &[]);
-                self.draw_state.draw_batches(&mut pass, &self.textures, seg.first_batch..end);
+                self.draw_state
+                    .draw_batches(&mut pass, &self.textures, seg.first_batch..end);
 
                 // text isn't segmented yet, so it only goes in the last screen pass
-                if Some(i) == last_screen {
-                    self.text_brush.draw(&mut pass);
+                if self.draw_state.segment_has_text(i) {
+                    if let Some(Some(slot)) = self.text_pool.get(i) {
+                        slot.brush.draw(&mut pass);
+                    }
                 }
             }
         }
@@ -760,7 +794,8 @@ impl State {
         let slot = self.cam_used;
         self.cam_used += 1;
         if slot < self.cam_pool.len() {
-            self.queue.write_buffer(&self.cam_pool[slot].0, 0, bytemuck::cast_slice(&[uniform]));
+            self.queue
+                .write_buffer(&self.cam_pool[slot].0, 0, bytemuck::cast_slice(&[uniform]));
         } else {
             let buffer = self.device.create_buffer_init(&util::BufferInitDescriptor {
                 label: Some("Custom Camera Buffer"),
@@ -770,11 +805,18 @@ impl State {
             let (bg, _) = Self::get_camera_bind_group(&buffer, &self.device);
             self.cam_pool.push((buffer, bg));
         }
-        self.draw_state.begin_segment(Some(slot), cam.render_target.clone());
+
+        self.draw_state.begin_segment(
+            Some(slot),
+            cam.render_target.clone(),
+            cam.position,
+            cam.zoom,
+        );
     }
 
     pub fn set_default_camera(&mut self) {
-        self.draw_state.begin_segment(None, None);
+        self.draw_state
+            .begin_segment(None, None, Vector2::zero(), 1.0);
     }
 }
 
@@ -892,23 +934,57 @@ impl State {
     /// ## FONT
 
     pub fn load_font_from_path(&mut self, path: &str) {
-        let font = Font::from_path(self.fonts.len(), path);
+        let font = FlakeFont::from_path(self.fonts.len(), path);
         self.fonts.push(font);
 
         self.rebuild_text_brush();
     }
 
     pub fn load_font_from_bytes(&mut self, bytes: &[u8]) {
-        let font = Font::from_bytes(self.fonts.len(), bytes);
+        let font = FlakeFont::from_bytes(self.fonts.len(), bytes);
         self.fonts.push(font);
 
         self.rebuild_text_brush();
     }
 
-    pub fn load_font(&mut self, font: Font) {
+    pub fn load_font(&mut self, font: FlakeFont) {
         self.fonts.push(font);
 
         self.rebuild_text_brush();
+    }
+
+    pub fn measure_text(&mut self, text: &str, size: f32, font: Option<&FlakeFont>) -> (f32, f32) {
+        // Lazily parse any fonts added since last call (works for every load path)
+        while self.metric_fonts.len() < self.fonts.len() {
+            let data = &self.fonts[self.metric_fonts.len()].data;
+            self.metric_fonts
+                .push(FontVec::try_from_vec(data.to_vec()).expect("Invalid font data"));
+        }
+
+        let id = font.map_or(0, |f| f.id.0);
+        let sf = self.metric_fonts[id].as_scaled(PxScale::from(size));
+
+        let line_h = sf.height() + sf.line_gap();
+        let (mut max_w, mut w, mut lines) = (0.0_f32, 0.0_f32, 1);
+        let mut prev = None;
+
+        for c in text.chars() {
+            if c == '\n' {
+                max_w = max_w.max(w);
+                w = 0.0;
+                lines += 1;
+                prev = None;
+                continue;
+            }
+            let g = sf.glyph_id(c);
+            if let Some(p) = prev {
+                w += sf.kern(p, g);
+            }
+            w += sf.h_advance(g);
+            prev = Some(g);
+        }
+
+        (max_w.max(w) / 2.0, (sf.height() + (lines - 1) as f32 * line_h) / 2.0)
     }
 
     /// # RenderTarget

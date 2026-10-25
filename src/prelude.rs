@@ -1201,6 +1201,12 @@ pub fn load_font_from_bytes(bytes: &[u8]) -> Font {
     })
 }
 
+/// Returns the (width, height) of `text` when drawn with `draw_text` at this size.
+pub fn measure_text(t: &str, size: f32, font: Option<&Font>) -> Vector2 {
+    let (w, h) = ctx(|s| s.measure_text(t, size, font));
+    Vector2::new(w, h)
+}
+
 /// Draws a line from `(x1, y1)` to `(x2, y2)` with a triangular head at the end.
 /// The tip extends `head_size` past `(x2, y2)`.
 pub fn draw_arrow(

@@ -15,9 +15,16 @@ impl ScrollFrame {
     fn new(x: f32, y: f32, w: f32, h: f32, content_h: f32) -> Self {
         let target = render_target(w as u32, h as u32, FilterType::Nearest);
         Self {
-            x, y, w, h, content_h,
+            x,
+            y,
+            w,
+            h,
+            content_h,
             scroll: 0.0,
-            cam: Camera2D { render_target: Some(target), ..Default::default() },
+            cam: Camera2D {
+                render_target: Some(target),
+                ..Default::default()
+            },
             drag_from: None,
         }
     }
@@ -91,12 +98,40 @@ async fn main() {
 
         // Which row is under the mouse (content-space)
         let (_, ly) = frame.local_mouse();
-        let hovered_row = if frame.hovered() { Some((ly / ROW_H) as usize) } else { None };
+        let hovered_row = if frame.hovered() {
+            Some((ly / ROW_H) as usize)
+        } else {
+            None
+        };
 
         frame.begin(DARK_GRAY);
         for i in 0..ROWS {
-            let color = if Some(i) == hovered_row { YELLOW } else if i % 2 == 0 { BLUE } else { LIGHT_BLUE };
-            draw_rectangle_rounded(10.0, i as f32 * ROW_H + 5.0, 270.0, ROW_H - 10.0, 8.0, color);
+            let color = if Some(i) == hovered_row {
+                YELLOW
+            } else if i % 2 == 0 {
+                BLUE
+            } else {
+                LIGHT_BLUE
+            };
+            draw_rectangle_rounded(
+                10.0,
+                i as f32 * ROW_H + 5.0,
+                270.0,
+                ROW_H - 10.0,
+                8.0,
+                color,
+            );
+
+            let text = format!("{}) Hello World", i + 1);
+            let m = measure_text(&text, 32.0, None);
+            draw_text(
+                &text,
+                15.0,
+                i as f32 * ROW_H + ROW_H / 2.0 - m.y / 2.0,
+                16.0,
+                None,
+                if Some(i) == hovered_row { BLACK } else { WHITE },
+            );
         }
         frame.end();
 

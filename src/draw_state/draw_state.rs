@@ -1,3 +1,4 @@
+use crate::camera::render_target::RenderTarget;
 use crate::draw_state::batch::Batch;
 use crate::draw_state::shapes::circle::{circle_indices, circle_vertices};
 use crate::draw_state::shapes::color::Color;
@@ -16,13 +17,14 @@ use wgpu::{Device, Queue, RenderPass};
 use wgpu_text::TextBrush;
 use wgpu_text::glyph_brush::ab_glyph::FontVec;
 use wgpu_text::glyph_brush::{FontId, Section, Text};
-use crate::camera::render_target::RenderTarget;
 
 #[derive(Clone, Debug)]
 pub struct Segment {
     pub first_batch: usize,
-    pub camera: Option<usize>,          // index into State.cam_pool, None = default cam
-    pub target: Option<RenderTarget>,   // None = screen
+    pub camera: Option<usize>,
+    pub target: Option<RenderTarget>,
+    pub cam_pos: Vector2<f32>,
+    pub zoom: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -33,6 +35,7 @@ pub struct TextItem {
     pub z: f32,
     pub size: f32,
     pub color: Color,
+    pub segment: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -53,6 +56,7 @@ pub struct DrawState {
     richtext_text: String,
     span_refs: Vec<SpanRef>,
     richtext_sections: Vec<RichtextSection>,
+    richtext_segments: Vec<usize>,
 }
 
 impl DrawState {
@@ -76,57 +80,87 @@ impl DrawState {
             ],
             batches: Vec::with_capacity(64),
             last_batch: [None; 3],
-            segments: vec![Segment { first_batch: 0, camera: None, target: None }],
+            segments: vec![Segment {
+                first_batch: 0,
+                camera: None,
+                target: None,
+                cam_pos: Vector2::zero(),
+                zoom: 1.0,
+            }],
 
             text_queue: Vec::with_capacity(128),
             text_len: 0,
 
             richtext_sections: Vec::with_capacity(128),
+            richtext_segments: Vec::with_capacity(128),
             span_refs: Vec::with_capacity(128),
             richtext_text: String::new(),
         }
     }
 
-    pub fn upload(
-        &mut self,
-        device: &Device,
-        queue: &Queue,
-        text_brush: &mut TextBrush<FontVec>,
-    ) -> anyhow::Result<()> {
+    pub fn upload_shapes(&mut self, device: &Device, queue: &Queue) {
         self.rect_buffer.upload(device, queue, &self.instances[0]);
         self.circle_buffer.upload(device, queue, &self.instances[1]);
         self.triangle_buffer
             .upload(device, queue, &self.instances[2]);
+    }
 
-        let plain = self.text_queue[..self.text_len].iter().map(|item| {
-            Section::default()
-                .add_text(
-                    Text::new(&item.text)
-                        .with_scale(item.size)
-                        .with_color(item.color.to_array())
-                        .with_z(item.z)
-                        .with_font_id(item.font_id),
-                )
-                .with_screen_position((item.pos.0, item.pos.1))
-        });
+    pub fn segment_has_text(&self, seg: usize) -> bool {
+        self.text_queue[..self.text_len]
+            .iter()
+            .any(|i| i.segment == seg)
+            || self.richtext_segments.contains(&seg)
+    }
 
-        let rich = self.richtext_sections.iter().map(|sec| {
-            let mut section =
-                Section::default().with_screen_position((sec.position.x, sec.position.y));
-            for r in &self.span_refs[sec.spans.clone()] {
-                section = section.add_text(
-                    Text::new(&self.richtext_text[r.range.clone()])
-                        .with_scale(r.size)
-                        .with_color(r.color.to_array())
-                        .with_z(sec.z)
-                        .with_font_id(r.font_id),
-                );
-            }
-            section
-        });
+    pub fn upload_text(
+        &self,
+        device: &Device,
+        queue: &Queue,
+        brush: &mut TextBrush<FontVec>,
+        seg: usize,
+    ) -> anyhow::Result<()> {
+        let (off, zoom) = (self.segments[seg].cam_pos, self.segments[seg].zoom);
+        let plain = self.text_queue[..self.text_len]
+            .iter()
+            .filter(move |i| i.segment == seg)
+            .map(|item| {
+                Section::default()
+                    .add_text(
+                        Text::new(&item.text)
+                            .with_scale(item.size * zoom)
+                            .with_color(item.color.to_array())
+                            .with_z(item.z)
+                            .with_font_id(item.font_id),
+                    )
+                    .with_screen_position((
+                        (item.pos.0 - off.x) * zoom,
+                        (item.pos.1 - off.y) * zoom,
+                    ))
+            });
 
-        text_brush.queue(device, queue, plain.chain(rich))?;
+        let rich = self
+            .richtext_sections
+            .iter()
+            .zip(&self.richtext_segments)
+            .filter(move |(_, s)| **s == seg)
+            .map(|(sec, _)| {
+                let mut section = Section::default().with_screen_position((
+                    (sec.position.x - off.x) * zoom,
+                    (sec.position.y - off.y) * zoom,
+                ));
+                for r in &self.span_refs[sec.spans.clone()] {
+                    section = section.add_text(
+                        Text::new(&self.richtext_text[r.range.clone()])
+                            .with_scale(r.size * zoom)
+                            .with_color(r.color.to_array())
+                            .with_z(sec.z)
+                            .with_font_id(r.font_id),
+                    );
+                }
+                section
+            });
 
+        brush.queue(device, queue, plain.chain(rich))?;
         Ok(())
     }
 
@@ -170,14 +204,36 @@ impl DrawState {
         }
     }
 
-    pub fn begin_segment(&mut self, camera: Option<usize>, target: Option<RenderTarget>) {
-        self.segments.push(Segment { first_batch: self.batches.len(), camera, target });
-        self.last_batch = [None; 3]; // stop batches merging across segments
+    pub fn begin_segment(
+        &mut self,
+        camera: Option<usize>,
+        target: Option<RenderTarget>,
+        cam_pos: Vector2<f32>,
+        zoom: f32,
+    ) {
+        self.segments.push(Segment {
+            first_batch: self.batches.len(),
+            camera,
+            target,
+            cam_pos,
+            zoom,
+        });
+        self.last_batch = [None; 3];
     }
-    pub fn segments(&self) -> &[Segment] { &self.segments }
-    pub fn batch_count(&self) -> usize { self.batches.len() }
 
-    pub fn draw_batches<'a>(&'a self, pass: &mut RenderPass<'a>, textures: &'a [TextureEntry], range: std::ops::Range<usize>) {
+    pub fn segments(&self) -> &[Segment] {
+        &self.segments
+    }
+    pub fn batch_count(&self) -> usize {
+        self.batches.len()
+    }
+
+    pub fn draw_batches<'a>(
+        &'a self,
+        pass: &mut RenderPass<'a>,
+        textures: &'a [TextureEntry],
+        range: std::ops::Range<usize>,
+    ) {
         for b in &self.batches[range] {
             pass.set_bind_group(1, &textures[b.texture].bind_group, &[]);
             self.buffer_for(b.shape).draw_range(pass, b.range.clone());
@@ -194,13 +250,20 @@ impl DrawState {
         self.last_batch = [None; 3];
 
         self.segments.clear();
-        self.segments.push(Segment { first_batch: 0, camera: None, target: None });
+        self.segments.push(Segment {
+            first_batch: 0,
+            camera: None,
+            target: None,
+            cam_pos: Vector2::zero(),
+            zoom: 1.0,
+        });
 
         self.text_len = 0;
 
         self.richtext_text.clear();
         self.span_refs.clear();
         self.richtext_sections.clear();
+        self.richtext_segments.clear();
 
         self.z_offset = 0.0;
     }
@@ -654,27 +717,30 @@ impl DrawState {
         color: Color,
     ) {
         self.increment_z();
+        let segment = self.segments.len() - 1;
+        let font_id = font.unwrap_or(&fonts[0]).id;
 
         if self.text_len < self.text_queue.len() {
             let item = &mut self.text_queue[self.text_len];
             item.text.clear();
             item.text.push_str(text);
-            item.pos.0 = x;
-            item.pos.1 = y;
+            item.pos = (x, y);
             item.z = self.z_offset;
             item.color = color;
             item.size = size;
+            item.font_id = font_id;
+            item.segment = segment;
         } else {
             self.text_queue.push(TextItem {
                 text: text.to_owned(),
-                font_id: font.unwrap_or(&fonts[0]).id,
+                font_id,
                 pos: (x, y),
                 z: self.z_offset,
                 size,
                 color,
+                segment,
             });
         }
-
         self.text_len += 1;
     }
 
@@ -697,11 +763,13 @@ impl DrawState {
                 font_id: s.font_id,
             });
         }
+
         self.richtext_sections.push(RichtextSection {
             position,
             z: self.z_offset,
             spans: first..self.span_refs.len(),
         });
+        self.richtext_segments.push(self.segments.len() - 1);
     }
 
     pub fn draw_arrow(
