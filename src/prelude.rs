@@ -2,9 +2,11 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+pub use crate::camera::camera2d::Camera2D;
+use crate::camera::render_target::RenderTarget;
 use crate::draw_state::shapes::Shape;
-pub use crate::end_frame;
 pub use crate::draw_state::shapes::color::*;
+pub use crate::end_frame;
 use crate::global::{PENDING_CONFIG, STATE, ctx};
 pub use crate::misc::flake_image::Image;
 use crate::misc::font::Font;
@@ -28,7 +30,6 @@ pub use winit::keyboard::KeyCode;
 use winit::platform::windows::WindowExtWindows;
 use winit::window::Window;
 pub use winit::window::{WindowButtons, WindowLevel};
-
 // -- Out-facing API --------------------------------------------------------------------------------------------------------------
 
 /// Exits the running application, must be called while running.
@@ -1241,8 +1242,14 @@ pub fn screen_height() -> f32 {
 /// Creates an empty texture of the given size. Fill it with `update_texture`.
 pub fn create_empty_texture(width: u32, height: u32, filter_type: FilterType) -> Texture {
     ctx(|s| {
-        let gpu = GpuTexture::empty(&s.device, width, height, filter_type)
-            .expect("Couldn't create empty GpuTexture");
+        let gpu = GpuTexture::empty(
+            &s.device,
+            width,
+            height,
+            filter_type,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+        )
+        .expect("Couldn't create empty GpuTexture");
 
         Texture {
             id: s.add_gpu_texture(gpu),
@@ -1372,4 +1379,19 @@ pub fn draw_texture_ex(texture: Texture, x: f32, y: f32, p: DrawTextureParams) {
 /// Replaces the pixels of an existing texture with those from `image`.
 pub fn update_texture(texture: Texture, image: &Image) {
     ctx(|s| s.update_texture(texture.id, image))
+}
+
+/// Creates a new RenderTarget.
+pub fn render_target(width: u32, height: u32, filter_type: FilterType) -> RenderTarget {
+    ctx(|s| s.create_render_target(width, height, filter_type))
+}
+
+/// Sets the currently active camera being used to draw on.
+pub fn set_camera(cam: &Camera2D) {
+    ctx(|s| s.set_camera(cam))
+}
+
+/// Resets the camera to the default screen one.
+pub fn set_default_camera() {
+    ctx(|s| s.set_default_camera())
 }

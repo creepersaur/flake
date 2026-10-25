@@ -1,7 +1,7 @@
 #![allow(unused_doc_comments)]
-
 use crate::camera::camera2d::Camera2D;
 use crate::camera::camera3d::Camera3D;
+use crate::camera::render_target::RenderTarget;
 use crate::camera::{Camera, CameraUniform};
 use crate::draw_state::draw_state::DrawState;
 use crate::global::STATE;
@@ -62,6 +62,8 @@ pub struct State {
     camera_uniform: CameraUniform,
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
+    cam_pool: Vec<(Buffer, BindGroup)>,
+    cam_used: usize,
 
     // Time
     last_frame: Instant,
@@ -99,7 +101,8 @@ impl State {
             Self::get_camera_bind_group(&camera_buffer, &device);
 
         /// ## Textures (and Depth)
-        let depth_texture = GpuTexture::create_depth_texture(&device, &config, "depth_texture");
+        let depth_texture =
+            GpuTexture::create_depth_texture(&device, config.width, config.height, "depth_texture");
 
         let texture_layout = Self::get_texture_layout(&device);
 
@@ -108,7 +111,7 @@ impl State {
             Self::get_render_pipeline(&device, &config, &camera_bind_group_layout, &texture_layout);
 
         /// # ANTI-ALIASING (MSAA)
-        let msaa_view = Self::create_msaa_view(&device, &config);
+        let msaa_view = Self::create_msaa_view(&device, &config, config.width, config.height);
 
         let draw_state = DrawState::new(&device);
         let text_brush_builder = BrushBuilder::using_fonts(vec![])
@@ -154,6 +157,8 @@ impl State {
             camera_uniform,
             camera_buffer,
             camera_bind_group,
+            cam_pool: Vec::new(),
+            cam_used: 0,
 
             target_fps,
             fps_cap: true,
@@ -178,13 +183,18 @@ impl State {
         self.add_texture(white, FilterType::Nearest);
     }
 
-    fn create_msaa_view(device: &Device, config: &SurfaceConfiguration) -> TextureView {
+    fn create_msaa_view(
+        device: &Device,
+        config: &SurfaceConfiguration,
+        width: u32,
+        height: u32,
+    ) -> TextureView {
         device
             .create_texture(&TextureDescriptor {
                 label: Some("msaa"),
                 size: Extent3d {
-                    width: config.width,
-                    height: config.height,
+                    width,
+                    height,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
@@ -207,6 +217,7 @@ impl State {
             fovy: 45.0,
             znear: 0.1,
             zfar: 100.0,
+            render_target: None,
         }
     }
 
@@ -216,6 +227,7 @@ impl State {
             width: width as f32,
             height: height as f32,
             zoom: 1.0,
+            render_target: None,
         }
     }
 
@@ -312,7 +324,8 @@ impl State {
             .iter()
             .find(|f| f.is_srgb())
             .copied()
-            .unwrap_or(caps.formats[0]);
+            .unwrap_or(caps.formats[0])
+            .remove_srgb_suffix();
 
         let alpha_mode = if caps
             .alpha_modes
@@ -541,9 +554,18 @@ impl State {
             self.config.height as f32,
             &self.queue,
         );
-        self.msaa_view = Self::create_msaa_view(&self.device, &self.config);
-        self.depth_texture =
-            GpuTexture::create_depth_texture(&self.device, &self.config, "depth_texture");
+        self.msaa_view = Self::create_msaa_view(
+            &self.device,
+            &self.config,
+            self.config.width,
+            self.config.height,
+        );
+        self.depth_texture = GpuTexture::create_depth_texture(
+            &self.device,
+            self.config.width,
+            self.config.height,
+            "depth_texture",
+        );
 
         self.camera.width = width as f32;
         self.camera.height = height as f32;
@@ -658,37 +680,64 @@ impl State {
             self.draw_state
                 .upload(&self.device, &self.queue, &mut self.text_brush)?;
 
-            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.msaa_view,
-                    resolve_target: Some(&view),
-                    depth_slice: None,
-                    ops: Operations {
-                        load: if let Some(clear_color) = self.clear_color {
-                            LoadOp::Clear(clear_color.to_wgpu())
-                        } else {
+            let segments = self.draw_state.segments();
+            let last_screen = segments.iter().rposition(|s| s.target.is_none());
+            let mut screen_cleared = false;
+            let mut rt_cleared: Vec<usize> = Vec::new();
+
+            for (i, seg) in segments.iter().enumerate() {
+                let end = segments.get(i + 1).map_or(self.draw_state.batch_count(), |n| n.first_batch);
+
+                let cam_bg = match seg.camera {
+                    Some(slot) => &self.cam_pool[slot].1,
+                    None => &self.camera_bind_group,
+                };
+
+                let (msaa, resolve, depth, load) = match &seg.target {
+                    Some(rt) => {
+                        let load = if rt_cleared.contains(&rt.texture.id) {
                             LoadOp::Load
-                        },
-                        store: StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture.view,
-                    depth_ops: Some(Operations {
-                        load: LoadOp::Clear(1.0),
-                        store: StoreOp::Store,
+                        } else {
+                            rt_cleared.push(rt.texture.id);
+                            LoadOp::Clear(Color::TRANSPARENT)
+                        };
+                        (&rt.msaa_view, &self.textures[rt.texture.id].gpu.view, &rt.depth.view, load)
+                    }
+                    None => {
+                        let load = match (screen_cleared, self.clear_color) {
+                            (false, Some(c)) => LoadOp::Clear(c.to_wgpu()),
+                            _ => LoadOp::Load,
+                        };
+                        screen_cleared = true;
+                        (&self.msaa_view, &view, &self.depth_texture.view, load)
+                    }
+                };
+
+                let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                    label: Some("Render Pass"),
+                    color_attachments: &[Some(RenderPassColorAttachment {
+                        view: msaa,
+                        resolve_target: Some(resolve),
+                        depth_slice: None,
+                        ops: Operations { load, store: StoreOp::Store },
+                    })],
+                    depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                        view: depth,
+                        depth_ops: Some(Operations { load: LoadOp::Clear(1.0), store: StoreOp::Store }),
+                        stencil_ops: None,
                     }),
-                    stencil_ops: None,
-                }),
-                ..Default::default()
-            });
+                    ..Default::default()
+                });
 
-            pass.set_pipeline(&self.render_pipeline);
-            pass.set_bind_group(0, &self.camera_bind_group, &[]);
+                pass.set_pipeline(&self.render_pipeline);
+                pass.set_bind_group(0, cam_bg, &[]);
+                self.draw_state.draw_batches(&mut pass, &self.textures, seg.first_batch..end);
 
-            self.draw_state
-                .draw(&mut pass, &self.textures, &self.text_brush);
+                // text isn't segmented yet, so it only goes in the last screen pass
+                if Some(i) == last_screen {
+                    self.text_brush.draw(&mut pass);
+                }
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -697,6 +746,35 @@ impl State {
         self.clear_color = None;
 
         Ok(self.window.request_redraw())
+    }
+
+    pub fn set_camera(&mut self, cam: &Camera2D) {
+        let mut cam = cam.clone();
+        if let Some(rt) = &cam.render_target {
+            cam.width = rt.texture.width as f32;
+            cam.height = rt.texture.height as f32;
+        }
+        let mut uniform = CameraUniform::new();
+        uniform.update_view_proj(&cam);
+
+        let slot = self.cam_used;
+        self.cam_used += 1;
+        if slot < self.cam_pool.len() {
+            self.queue.write_buffer(&self.cam_pool[slot].0, 0, bytemuck::cast_slice(&[uniform]));
+        } else {
+            let buffer = self.device.create_buffer_init(&util::BufferInitDescriptor {
+                label: Some("Custom Camera Buffer"),
+                contents: bytemuck::cast_slice(&[uniform]),
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            });
+            let (bg, _) = Self::get_camera_bind_group(&buffer, &self.device);
+            self.cam_pool.push((buffer, bg));
+        }
+        self.draw_state.begin_segment(Some(slot), cam.render_target.clone());
+    }
+
+    pub fn set_default_camera(&mut self) {
+        self.draw_state.begin_segment(None, None);
     }
 }
 
@@ -757,7 +835,7 @@ impl State {
             .window
             .request_inner_size(PhysicalSize::new(self.window.outer_size().width, h));
     }
-    
+
     pub fn set_window_size(&mut self, w: u32, h: u32) {
         let _ = self.window.request_inner_size(PhysicalSize::new(w, h));
     }
@@ -831,5 +909,29 @@ impl State {
         self.fonts.push(font);
 
         self.rebuild_text_brush();
+    }
+
+    /// # RenderTarget
+
+    pub fn create_render_target(
+        &mut self,
+        width: u32,
+        height: u32,
+        filter_type: FilterType,
+    ) -> RenderTarget {
+        let gpu = GpuTexture::empty(&self.device, width, height, filter_type, self.config.format)
+            .expect("Couldn't create empty GpuTexture");
+
+        RenderTarget {
+            texture: crate::model::texture::Texture {
+                id: self.add_gpu_texture(gpu),
+                width,
+                height,
+            },
+
+            msaa_view: Self::create_msaa_view(&self.device, &self.config, width, height),
+
+            depth: GpuTexture::create_depth_texture(&self.device, width, height, "depth_texture"),
+        }
     }
 }

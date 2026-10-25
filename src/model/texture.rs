@@ -67,6 +67,7 @@ pub(crate) struct TextureEntry {
     pub bind_group: BindGroup,
 }
 
+#[derive(Clone, Debug)]
 pub struct GpuTexture {
     #[allow(unused)]
     pub texture: wgpu::Texture,
@@ -81,26 +82,17 @@ impl GpuTexture {
         width: u32,
         height: u32,
         filter_type: FilterType,
+        format: TextureFormat,
     ) -> Result<Self> {
-        let size = Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        };
-
-        let mip_level_count = if matches!(filter_type, FilterType::Nearest) {
-            1
-        } else {
-            width.max(height).ilog2() + 1
-        };
+        let size = Extent3d { width, height, depth_or_array_layers: 1 };
 
         let texture = device.create_texture(&TextureDescriptor {
-            label: Some("texture"),
+            label: Some("render target"),
             size,
-            mip_level_count,
+            mip_level_count: 1, // render attachments must be single-mip
             sample_count: 1,
             dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba8UnormSrgb,
+            format,             // was Rgba8UnormSrgb
             usage: TextureUsages::TEXTURE_BINDING
                 | TextureUsages::COPY_DST
                 | TextureUsages::RENDER_ATTACHMENT,
@@ -108,25 +100,18 @@ impl GpuTexture {
         });
 
         let filter_mode = filter_type.to_wgpu_filter();
-        let mipmap_filter = filter_type.to_wgpu_mipmap_filter();
-
         let view = texture.create_view(&TextureViewDescriptor::default());
-
         let sampler = device.create_sampler(&SamplerDescriptor {
             address_mode_u: AddressMode::ClampToEdge,
             address_mode_v: AddressMode::ClampToEdge,
             address_mode_w: AddressMode::ClampToEdge,
             mag_filter: filter_mode,
             min_filter: filter_mode,
-            mipmap_filter,
+            mipmap_filter: filter_type.to_wgpu_mipmap_filter(),
             ..Default::default()
         });
 
-        Ok(Self {
-            texture,
-            view,
-            sampler,
-        })
+        Ok(Self { texture, view, sampler })
     }
 
     #[allow(unused)]
@@ -306,12 +291,13 @@ impl GpuTexture {
 
     pub fn create_depth_texture(
         device: &Device,
-        config: &SurfaceConfiguration,
+        width: u32,
+        height: u32,
         label: &str,
     ) -> Self {
         let size = Extent3d {
-            width: config.width.max(1),
-            height: config.height.max(1),
+            width: width.max(1),
+            height: height.max(1),
             depth_or_array_layers: 1,
         };
 

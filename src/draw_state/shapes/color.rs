@@ -2,12 +2,18 @@ use crate::prelude::{Vector3, Vector4};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, bytemuck::Zeroable, bytemuck::Pod, PartialEq)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable, bytemuck::Pod, PartialEq)]
 pub struct Color {
     pub r: f32,
     pub g: f32,
     pub b: f32,
     pub a: f32,
+}
+
+impl Default for Color {
+    fn default() -> Self {
+        BLACK
+    }
 }
 
 #[allow(unused)]

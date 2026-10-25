@@ -16,6 +16,14 @@ use wgpu::{Device, Queue, RenderPass};
 use wgpu_text::TextBrush;
 use wgpu_text::glyph_brush::ab_glyph::FontVec;
 use wgpu_text::glyph_brush::{FontId, Section, Text};
+use crate::camera::render_target::RenderTarget;
+
+#[derive(Clone, Debug)]
+pub struct Segment {
+    pub first_batch: usize,
+    pub camera: Option<usize>,          // index into State.cam_pool, None = default cam
+    pub target: Option<RenderTarget>,   // None = screen
+}
 
 #[derive(Clone, Debug)]
 pub struct TextItem {
@@ -37,6 +45,7 @@ pub struct DrawState {
     instances: [Vec<InstanceRaw>; 3],
     batches: Vec<Batch>,
     last_batch: [Option<usize>; 3],
+    segments: Vec<Segment>,
 
     text_queue: Vec<TextItem>,
     text_len: usize,
@@ -67,6 +76,7 @@ impl DrawState {
             ],
             batches: Vec::with_capacity(64),
             last_batch: [None; 3],
+            segments: vec![Segment { first_batch: 0, camera: None, target: None }],
 
             text_queue: Vec::with_capacity(128),
             text_len: 0,
@@ -120,19 +130,6 @@ impl DrawState {
         Ok(())
     }
 
-    pub fn draw<'a>(
-        &'a self,
-        pass: &mut RenderPass<'a>,
-        textures: &'a [TextureEntry],
-        text_brush: &TextBrush<FontVec>,
-    ) {
-        for b in &self.batches {
-            pass.set_bind_group(1, &textures[b.texture].bind_group, &[]);
-            self.buffer_for(b.shape).draw_range(pass, b.range.clone());
-        }
-        text_brush.draw(pass);
-    }
-
     fn buffer_for(&self, shape: Shape) -> &ShapeBuffer {
         match shape {
             Shape::Rectangle => &self.rect_buffer,
@@ -172,6 +169,20 @@ impl DrawState {
             }
         }
     }
+
+    pub fn begin_segment(&mut self, camera: Option<usize>, target: Option<RenderTarget>) {
+        self.segments.push(Segment { first_batch: self.batches.len(), camera, target });
+        self.last_batch = [None; 3]; // stop batches merging across segments
+    }
+    pub fn segments(&self) -> &[Segment] { &self.segments }
+    pub fn batch_count(&self) -> usize { self.batches.len() }
+
+    pub fn draw_batches<'a>(&'a self, pass: &mut RenderPass<'a>, textures: &'a [TextureEntry], range: std::ops::Range<usize>) {
+        for b in &self.batches[range] {
+            pass.set_bind_group(1, &textures[b.texture].bind_group, &[]);
+            self.buffer_for(b.shape).draw_range(pass, b.range.clone());
+        }
+    }
 }
 
 impl DrawState {
@@ -181,6 +192,9 @@ impl DrawState {
         }
         self.batches.clear();
         self.last_batch = [None; 3];
+
+        self.segments.clear();
+        self.segments.push(Segment { first_batch: 0, camera: None, target: None });
 
         self.text_len = 0;
 

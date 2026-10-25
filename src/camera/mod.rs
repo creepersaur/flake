@@ -1,5 +1,6 @@
 pub mod camera3d;
 pub mod camera2d;
+pub mod render_target;
 
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::from_cols(
     cgmath::Vector4::new(1.0, 0.0, 0.0, 0.0),

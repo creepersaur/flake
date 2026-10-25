@@ -1,4 +1,5 @@
 use crate::camera::Camera;
+use crate::camera::render_target::RenderTarget;
 
 pub struct Camera3D {
     pub eye: cgmath::Point3<f32>,
@@ -8,6 +9,8 @@ pub struct Camera3D {
     pub fovy: f32,
     pub znear: f32,
     pub zfar: f32,
+    #[allow(unused)]
+    pub render_target: Option<RenderTarget>
 }
 
 impl Camera for Camera3D {

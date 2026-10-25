@@ -70,10 +70,10 @@ impl ApplicationHandler<State> for App {
         self.state = Some(pollster::block_on(State::new(window.clone())).unwrap());
 
         PENDING_CONFIG.with_borrow(|s| {
-            self.state
-                .as_mut()
-                .and_then(|state| Some(state.clear_color = s.window_clear_color));
-            
+            self.state.as_mut().and_then(|state| {
+                Some(state.clear_color = Some(s.window_clear_color.unwrap_or_default()))
+            });
+
             self.set_state_prop(s.window_x, |value, state| state.set_window_x(*value));
             self.set_state_prop(s.window_y, |value, state| state.set_window_y(*value));
             self.set_state_prop(s.skip_taskbar, |value, _| window.set_skip_taskbar(*value));
