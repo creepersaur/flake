@@ -3,7 +3,7 @@ name = "flake"
 
 [package]
 name = "flake-engine"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["creepersaur"]
 edition = "2024"
 description = "Immediate-mode game framework built on wgpu + winit"
