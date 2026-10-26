@@ -17,7 +17,7 @@ macroquad). Designed to make creating apps and games easier. Supports all three 
 
 Add `flake-engine` to your `Cargo.toml` using the following command:
 
-```shell
+```asm
 cargo add flake-engine
 ```
 
