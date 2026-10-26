@@ -10,7 +10,7 @@
 
 ## An Immediate-Mode game framework
 
-Flake is an **immediate-mode** game framework and graphics library built on WGPU + Winit designed to make creating apps and games easier. (Inspired by
+Flake is an **immediate-mode** game framework and graphics library built on WGPU + Winit. (Inspired by
 macroquad). Designed to make creating apps and games easier. Supports all three main operating systems with known support for Windows.
 
 ## Getting Started
