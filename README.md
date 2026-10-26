@@ -196,11 +196,11 @@ writing text with formatting or for dialog in games. It takes in an iterable of 
 
 ```rust
 draw_richtext(vec2(10.0, 10.0), 16.0, WHITE, & [
-span("Hello,\n    my name is "),
-span("John Doe")
-.with_font(Some( & my_font))
-.with_size(30.0)
-.with_color(RED)
+    span("Hello,\n    my name is "),
+    span("John Doe")
+        .with_font(Some( & my_font))
+        .with_size(30.0)
+        .with_color(RED)
 ]);
 ```
 
