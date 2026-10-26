@@ -49,6 +49,7 @@ pub struct State {
 
     // Pipeline
     render_pipeline: RenderPipeline,
+    render_pipeline_premul: RenderPipeline,
     depth_texture: GpuTexture,
     msaa_view: TextureView,
     textures: Vec<TextureEntry>,
@@ -113,8 +114,14 @@ impl State {
         let texture_layout = Self::get_texture_layout(&device);
 
         /// # Render Pipeline
-        let render_pipeline =
-            Self::get_render_pipeline(&device, &config, &camera_bind_group_layout, &texture_layout);
+        let render_pipeline = Self::get_render_pipeline(
+            &device, &config, &camera_bind_group_layout, &texture_layout,
+            BlendState::ALPHA_BLENDING,
+        );
+        let render_pipeline_premul = Self::get_render_pipeline(
+            &device, &config, &camera_bind_group_layout, &texture_layout,
+            BlendState::PREMULTIPLIED_ALPHA_BLENDING,
+        );
 
         /// # ANTI-ALIASING (MSAA)
         let msaa_view = Self::create_msaa_view(&device, &config, config.width, config.height);
@@ -133,6 +140,7 @@ impl State {
             task: None,
 
             render_pipeline,
+            render_pipeline_premul,
             depth_texture,
             msaa_view,
             textures: Vec::with_capacity(128),
@@ -363,11 +371,11 @@ impl State {
                 },
             ],
         });
-        self.textures.push(TextureEntry { gpu, bind_group });
+        self.textures.push(TextureEntry { gpu, bind_group, premultiplied: false });
         self.textures.len() - 1
     }
 
-    pub fn add_gpu_texture(&mut self, gpu: GpuTexture) -> usize {
+    pub fn add_gpu_texture(&mut self, gpu: GpuTexture, premultiplied: bool) -> usize {
         let bind_group = self.device.create_bind_group(&BindGroupDescriptor {
             label: Some("texture bind group"),
             layout: &self.texture_layout,
@@ -382,7 +390,7 @@ impl State {
                 },
             ],
         });
-        self.textures.push(TextureEntry { gpu, bind_group });
+        self.textures.push(TextureEntry { gpu, bind_group, premultiplied });
         self.textures.len() - 1
     }
 
@@ -478,6 +486,7 @@ impl State {
         config: &SurfaceConfiguration,
         camera_bind_group_layout: &BindGroupLayout,
         texture_layout: &BindGroupLayout,
+        blend: BlendState,
     ) -> RenderPipeline {
         let shader = device.create_shader_module(include_wgsl!("shaders/shader.wgsl"));
 
@@ -503,7 +512,7 @@ impl State {
                 entry_point: Some("fs_main"),
                 targets: &[Some(ColorTargetState {
                     format: config.format,
-                    blend: Some(BlendState::ALPHA_BLENDING),
+                    blend: Some(blend),
                     write_mask: ColorWrites::ALL,
                 })],
                 compilation_options: Default::default(),
@@ -767,8 +776,13 @@ impl State {
 
                 pass.set_pipeline(&self.render_pipeline);
                 pass.set_bind_group(0, cam_bg, &[]);
-                self.draw_state
-                    .draw_batches(&mut pass, &self.textures, seg.first_batch..end);
+                self.draw_state.draw_batches(
+                    &mut pass,
+                    &self.textures,
+                    seg.first_batch..end,
+                    &self.render_pipeline,
+                    &self.render_pipeline_premul,
+                );
 
                 // text isn't segmented yet, so it only goes in the last screen pass
                 if self.draw_state.segment_has_text(i) {
@@ -1005,7 +1019,7 @@ impl State {
 
         RenderTarget {
             texture: crate::model::texture::Texture {
-                id: self.add_gpu_texture(gpu),
+                id: self.add_gpu_texture(gpu, true),
                 width,
                 height,
             },

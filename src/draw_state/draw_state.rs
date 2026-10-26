@@ -13,7 +13,7 @@ use crate::model::texture::{DrawTextureParams, Texture, TextureEntry};
 use crate::prelude::Span;
 use cgmath::{InnerSpace, MetricSpace, Vector2, Vector3, Vector4, Zero, vec2, vec4};
 use std::borrow::Borrow;
-use wgpu::{Device, Queue, RenderPass};
+use wgpu::{Device, Queue, RenderPass, RenderPipeline};
 use wgpu_text::TextBrush;
 use wgpu_text::glyph_brush::ab_glyph::FontVec;
 use wgpu_text::glyph_brush::{FontId, Section, Text};
@@ -233,9 +233,17 @@ impl DrawState {
         pass: &mut RenderPass<'a>,
         textures: &'a [TextureEntry],
         range: std::ops::Range<usize>,
+        normal: &'a RenderPipeline,
+        premul: &'a RenderPipeline,
     ) {
+        let mut current: Option<bool> = None;
         for b in &self.batches[range] {
-            pass.set_bind_group(1, &textures[b.texture].bind_group, &[]);
+            let entry = &textures[b.texture];
+            if current != Some(entry.premultiplied) {
+                pass.set_pipeline(if entry.premultiplied { premul } else { normal });
+                current = Some(entry.premultiplied);
+            }
+            pass.set_bind_group(1, &entry.bind_group, &[]);
             self.buffer_for(b.shape).draw_range(pass, b.range.clone());
         }
     }
