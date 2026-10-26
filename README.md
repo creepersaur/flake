@@ -1,7 +1,5 @@
 # Flake
 
----
-
 <div align="center">
 
 <img src="FlakeLogo.png" alt="drawing" width="300"/>
@@ -46,13 +44,13 @@ directly:
 
 ```rust
 loop {
-// If you don't clear the background it will be transparent
-clear_background(BLACK);
-
-draw_rectangle(50.0, 50.0, 200.0, 50.0, BLUE);
-draw_rectangle_lines(50.0, 50.0, 200.0, 50.0, 5.0, RED); // outline
-
-end_frame ! () // Remember to end the frame to avoid crashing
+    // If you don't clear the background it will be transparent
+    clear_background(BLACK);
+    
+    draw_rectangle(50.0, 50.0, 200.0, 50.0, BLUE);
+    draw_rectangle_lines(50.0, 50.0, 200.0, 50.0, 5.0, RED); // outline
+    
+    end_frame ! () // Remember to end the frame to avoid crashing
 }
 ```
 
