@@ -572,6 +572,10 @@ impl State {
         self.mouse_state.set_position(x, y);
     }
 
+    pub fn handle_mouse_wheel(&mut self, x: f32, y: f32) {
+        self.mouse_state.set_mouse_wheel(x, y);
+    }
+
     pub fn update(&mut self) {
         self.mouse_state
             .update_position(&self.window, &self.device_state);
@@ -637,6 +641,7 @@ impl State {
 
         self.keyboard_state.clear_just_pressed();
         self.mouse_state.clear_just_pressed();
+        self.mouse_state.clear_mouse_wheel();
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {

@@ -454,6 +454,17 @@ pub fn mouse_screen_position() -> (f32, f32) {
     ctx(|s| s.mouse_state.get_screen_position().into())
 }
 
+/// Returns the mouse scroll direction this frame (line delta).
+/// (You might need to multiply this by something like 20).
+///
+/// # Examples
+///
+/// ```
+/// let scroll_y = mouse_wheel().y;
+/// ```
+pub fn mouse_wheel() -> Vector2 {
+    ctx(|s| s.mouse_state.get_mouse_wheel())
+}
 /// Requests keyboard focus for the window.
 pub fn focus_window() {
     get_window().focus_window();

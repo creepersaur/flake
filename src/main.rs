@@ -7,6 +7,7 @@ struct ScrollFrame {
     h: f32,
     content_h: f32,
     scroll: f32,
+    scroll_velocity: f32,
     cam: Camera2D,
     drag_from: Option<f32>,
 }
@@ -21,6 +22,7 @@ impl ScrollFrame {
             h,
             content_h,
             scroll: 0.0,
+            scroll_velocity: 0.0,
             cam: Camera2D {
                 render_target: Some(target),
                 ..Default::default()
@@ -54,6 +56,11 @@ impl ScrollFrame {
             self.scroll -= my - prev;
             self.drag_from = Some(my);
         }
+        if self.hovered() {
+            self.scroll_velocity += mouse_wheel().y * 5.0;
+        }
+        self.scroll -= self.scroll_velocity;
+        self.scroll_velocity *= 0.9;
 
         // Arrow keys
         self.scroll += get_axis(KeyCode::ArrowUp, KeyCode::ArrowDown) * 500.0 * get_frame_time();

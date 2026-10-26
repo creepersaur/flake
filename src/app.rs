@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
-use winit::event::{KeyEvent, WindowEvent};
+use winit::event::{KeyEvent, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::PhysicalKey;
 use winit::platform::windows::WindowExtWindows;
@@ -161,6 +161,10 @@ impl ApplicationHandler<State> for App {
             WindowEvent::CursorMoved { position, .. } => {
                 state.handle_mouse_motion(position.x as f32, position.y as f32)
             }
+            WindowEvent::MouseWheel {
+                delta: MouseScrollDelta::LineDelta(x, y),
+                ..
+            } => state.handle_mouse_wheel(x, y),
 
             _ => {}
         }
