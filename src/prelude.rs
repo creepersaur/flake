@@ -1269,7 +1269,7 @@ pub fn create_empty_texture(width: u32, height: u32, filter_type: FilterType) ->
         .expect("Couldn't create empty GpuTexture");
 
         Texture {
-            id: s.add_gpu_texture(gpu),
+            id: s.add_gpu_texture(gpu, false),
             width,
             height,
         }

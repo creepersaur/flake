@@ -4,6 +4,7 @@
       <w>RRGGBB</w>
       <w>RRGGBBAA</w>
       <w>Winit</w>
+      <w>premul</w>
       <w>segs</w>
       <w>unorm</w>
     </words>

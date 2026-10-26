@@ -100,7 +100,7 @@ async fn main() {
     let mut frame = ScrollFrame::new(50.0, 50.0, 300.0, 400.0, ROWS as f32 * ROW_H);
 
     loop {
-        clear_background(BLACK);
+        clear_background(DARK_GRAY);
         frame.update();
 
         // Which row is under the mouse (content-space)
@@ -119,7 +119,7 @@ async fn main() {
                 BLUE
             } else {
                 LIGHT_BLUE
-            };
+            }.with_alpha(0.1);
             draw_rectangle_rounded(
                 10.0,
                 i as f32 * ROW_H + 5.0,
@@ -141,6 +141,8 @@ async fn main() {
             );
         }
         frame.end();
+
+        draw_rectangle(400.0, 400.0, 50.0, 50.0, BLUE.with_alpha(0.1));
 
         end_frame!();
     }

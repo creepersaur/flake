@@ -65,6 +65,7 @@ impl Texture {
 pub(crate) struct TextureEntry {
     pub gpu: GpuTexture,
     pub bind_group: BindGroup,
+    pub premultiplied: bool,
 }
 
 #[derive(Clone, Debug)]
