@@ -112,6 +112,7 @@ async fn main() {
         };
 
         frame.begin(DARK_GRAY);
+        set_mouse_icon(CursorIcon::Default);
         for i in 0..ROWS {
             let color = if Some(i) == hovered_row {
                 YELLOW
@@ -137,7 +138,7 @@ async fn main() {
                 i as f32 * ROW_H + ROW_H / 2.0 - m.y / 2.0,
                 16.0,
                 None,
-                if Some(i) == hovered_row { BLACK } else { WHITE },
+                if Some(i) == hovered_row { set_mouse_icon(CursorIcon::Pointer); BLACK } else { WHITE },
             );
         }
         frame.end();

@@ -29,7 +29,7 @@ pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
 use winit::platform::windows::WindowExtWindows;
 use winit::window::Window;
-pub use winit::window::{WindowButtons, WindowLevel};
+pub use winit::window::{CursorIcon, WindowButtons, WindowLevel};
 // -- Out-facing API --------------------------------------------------------------------------------------------------------------
 
 /// Exits the running application, must be called while running.
@@ -464,6 +464,17 @@ pub fn mouse_screen_position() -> (f32, f32) {
 /// ```
 pub fn mouse_wheel() -> Vector2 {
     ctx(|s| s.mouse_state.get_mouse_wheel())
+}
+
+/// Set the mouse cursor icon.
+///
+/// ## Examples
+///
+/// ```
+/// set_mouse_icon(CursorIcon::Pointer)
+/// ```
+pub fn set_mouse_icon(cursor_icon: CursorIcon) {
+    ctx(|s| s.window.set_cursor(cursor_icon))
 }
 /// Requests keyboard focus for the window.
 pub fn focus_window() {
