@@ -3,7 +3,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub use crate::camera::camera2d::Camera2D;
-use crate::camera::render_target::RenderTarget;
+pub use crate::camera::render_target::RenderTarget;
 use crate::draw_state::shapes::Shape;
 pub use crate::draw_state::shapes::color::*;
 pub use crate::end_frame;

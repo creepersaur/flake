@@ -164,7 +164,7 @@ get_vector(left, right, up, down) -> Vector2;
 
 ## Text in Flake
 
-By default, Flake is bundled with **Jetbrains Mono** 💖. Text also supports using newlines like `\n`.
+By default, Flake is bundled with **JetBrains Mono** 💖. Text also supports using newlines like `\n`.
 
 ```rs
 draw_text(text: &str, x: f32, y: f32, font_size: f32, font: Option<Font>, color: Color);
