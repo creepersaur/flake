@@ -116,7 +116,7 @@ impl MouseState {
 
     #[allow(unused)]
     #[inline(always)]
-    pub fn set_mouse_wheel(&mut self, x: f32, y: f32) {
-        self.mouse_wheel = vec2(x, y);
+    pub fn accumulate_mouse_wheel(&mut self, x: f32, y: f32) {
+        self.mouse_wheel += vec2(x, y);
     }
 }

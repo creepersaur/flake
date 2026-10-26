@@ -1,4 +1,4 @@
-use crate::prelude::{Color, Quaternion, Rect, Span, Timer, Vector2, Vector3, Vector4};
+use crate::prelude::{Quaternion, Rect, Span, Timer, Vector2, Vector3, Vector4};
 
 pub mod math;
 pub mod rect;
@@ -29,5 +29,5 @@ simplified_constructors! {
     timer(seconds: f32) -> Timer => Timer::new;
     timer_repeating(seconds: f32) -> Timer => Timer::new_repeating;
 
-    span<'a>(text: &'a str, color: Color) -> Span<'a> => Span::new;
+    span<'a>(text: &'a str) -> Span<'a> => Span::new;
 }

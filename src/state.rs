@@ -573,7 +573,7 @@ impl State {
     }
 
     pub fn handle_mouse_wheel(&mut self, x: f32, y: f32) {
-        self.mouse_state.set_mouse_wheel(x, y);
+        self.mouse_state.accumulate_mouse_wheel(x, y);
     }
 
     pub fn update(&mut self) {

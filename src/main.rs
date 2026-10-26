@@ -103,6 +103,13 @@ async fn main() {
         clear_background(BLACK);
         frame.update();
 
+        draw_rich_text(vec2(10.0, 10.0), 16.0, None, WHITE, &[
+            span("Hello there,\n    my name is "),
+            span("John Doe")
+                .with_size(30.0)
+                .with_color(RED)
+        ]);
+
         // Which row is under the mouse (content-space)
         let (_, ly) = frame.local_mouse();
         let hovered_row = if frame.hovered() {

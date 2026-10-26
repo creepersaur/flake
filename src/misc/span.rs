@@ -5,36 +5,36 @@ use wgpu_text::glyph_brush::FontId;
 #[derive(Clone, Copy, Debug)]
 pub struct Span<'a> {
     pub text: &'a str,
-    pub color: Color,
-    pub size: f32,
-    pub font_id: FontId,
+    pub color: Option<Color>,
+    pub size: Option<f32>,
+    pub font_id: Option<FontId>,
 }
 
 impl<'a> Span<'a> {
-    pub const fn new(text: &'a str, color: Color) -> Self {
+    pub const fn new(text: &'a str) -> Self {
         Self {
             text,
-            color,
-            size: 16.0,
-            font_id: FontId(0),
+            color: None,
+            size: None,
+            font_id: None,
         }
     }
 
     pub const fn with_size(mut self, size: f32) -> Self {
-        self.size = size;
+        self.size = Some(size);
         self
     }
 
     pub const fn with_color(mut self, color: Color) -> Self {
-        self.color = color;
+        self.color = Some(color);
         self
     }
 
     pub const fn with_font(mut self, font: Option<&Font>) -> Self {
         self.font_id = if let Some(font) = font {
-            font.id
+            Some(font.id)
         } else {
-            FontId(0)
+            None
         };
         self
     }

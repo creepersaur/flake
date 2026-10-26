@@ -69,6 +69,17 @@ pub trait Number:
     fn one() -> Self;
 }
 
+pub fn lerp<T: Copy + Sub + Add<<<T as Sub>::Output as Mul<f32>>::Output, Output = T>>(
+    a: T,
+    b: T,
+    t: f32,
+) -> T
+where
+    <T as Sub>::Output: Mul<f32>,
+{
+    a + (b - a) * t
+}
+
 macro_rules! impl_number {
     ($($t:ty),*) => {
         $(impl Number for $t {

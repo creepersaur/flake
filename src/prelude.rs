@@ -1148,12 +1148,12 @@ pub fn draw_text(t: &str, x: f32, y: f32, size: f32, font: Option<&Font>, color:
 ///         .with_size(32.0)
 /// ]);
 /// ```
-pub fn draw_rich_text<'a, I>(position: Vector2, spans: I)
+pub fn draw_rich_text<'a, I>(position: Vector2, size: f32, font: Option<&Font>, color: Color, spans: I)
 where
     I: IntoIterator,
     I::Item: Borrow<Span<'a>>,
 {
-    ctx(|s| s.draw_state.draw_richtext(position, spans))
+    ctx(|s| s.draw_state.draw_richtext(position, size, font, color, spans))
 }
 
 /// Loads a `.ttf`/`.otf` font from path and returns the `Font` object.

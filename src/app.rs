@@ -161,10 +161,18 @@ impl ApplicationHandler<State> for App {
             WindowEvent::CursorMoved { position, .. } => {
                 state.handle_mouse_motion(position.x as f32, position.y as f32)
             }
-            WindowEvent::MouseWheel {
-                delta: MouseScrollDelta::LineDelta(x, y),
-                ..
-            } => state.handle_mouse_wheel(x, y),
+            WindowEvent::MouseWheel { delta, .. } => {
+                const PIXELS_PER_LINE: f32 = 40.0;
+
+                let (x, y) = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => (x, y),
+                    MouseScrollDelta::PixelDelta(p) => {
+                        (p.x as f32 / PIXELS_PER_LINE, p.y as f32 / PIXELS_PER_LINE)
+                    }
+                };
+
+                state.handle_mouse_wheel(x, y)
+            }
 
             _ => {}
         }

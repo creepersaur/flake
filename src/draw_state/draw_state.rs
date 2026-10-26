@@ -744,12 +744,18 @@ impl DrawState {
         self.text_len += 1;
     }
 
-    pub fn draw_richtext<'a, I>(&mut self, position: Vector2<f32>, spans: I)
+    pub fn draw_richtext<'a, I>(&mut self, position: Vector2<f32>, size: f32, font: Option<&Font>, color: Color, spans: I)
     where
         I: IntoIterator,
         I::Item: Borrow<Span<'a>>,
     {
         self.increment_z();
+        
+        let default_font_id = if let Some(f) = font {
+            f.id
+        } else {
+            FontId(0)
+        };
 
         let first = self.span_refs.len();
         for s in spans {
@@ -758,9 +764,9 @@ impl DrawState {
             self.richtext_text.push_str(s.text);
             self.span_refs.push(SpanRef {
                 range: start..self.richtext_text.len(),
-                color: s.color,
-                size: s.size,
-                font_id: s.font_id,
+                color: s.color.unwrap_or(color),
+                size: s.size.unwrap_or(size),
+                font_id: s.font_id.unwrap_or(default_font_id),
             });
         }
 

@@ -2,6 +2,24 @@
 //!
 //! `flake` is a game/application framework inspired by macroquad, built on WGPU. Made to create
 //! games and apps very easily.
+//!
+//! ## Getting Started
+//!
+//! In your `main.rs`, write the following:
+//! 
+//! ```
+//! use flake::prelude::*;
+//! 
+//! #[flake]
+//! async fn main() {
+//!     loop {
+//!         draw_circle(mouse_position().0, mouse_position().1, 50.0, RED);
+//!         draw_text("Hello from Flake!", 10.0, 10.0, 16.0, None, WHITE);
+//! 
+//!         end_frame!()
+//!     }
+//! }
+//! ```
 
 use crate::app::App;
 use crate::prelude::{clear_background, Color};
