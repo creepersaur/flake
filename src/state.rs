@@ -989,7 +989,7 @@ impl State {
             prev = Some(g);
         }
 
-        (max_w.max(w) / 2.0, (sf.height() + (lines - 1) as f32 * line_h) / 2.0)
+        (max_w.max(w), sf.height() + (lines - 1) as f32 * line_h)
     }
 
     /// # RenderTarget
