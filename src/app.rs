@@ -7,6 +7,7 @@ use winit::dpi::PhysicalSize;
 use winit::event::{KeyEvent, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::PhysicalKey;
+#[cfg(target_os = "windows")]
 use winit::platform::windows::WindowExtWindows;
 use winit::window::{Icon, Window, WindowId};
 
@@ -76,6 +77,7 @@ impl ApplicationHandler<State> for App {
 
             self.set_state_prop(s.window_x, |value, state| state.set_window_x(*value));
             self.set_state_prop(s.window_y, |value, state| state.set_window_y(*value));
+            #[cfg(target_os = "windows")]
             self.set_state_prop(s.skip_taskbar, |value, _| window.set_skip_taskbar(*value));
             self.set_state_prop(s.window_passthrough, |value, state| {
                 state.set_window_passthrough(*value)

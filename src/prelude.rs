@@ -27,6 +27,7 @@ use std::borrow::Borrow;
 use std::sync::Arc;
 pub use winit::event::MouseButton;
 pub use winit::keyboard::KeyCode;
+#[cfg(target_os = "windows")]
 use winit::platform::windows::WindowExtWindows;
 use winit::window::Window;
 pub use winit::window::{CursorIcon, WindowButtons, WindowLevel};
@@ -126,6 +127,7 @@ pub fn set_window_enabled_buttons(window_buttons: WindowButtons) {
 /// Sets whether the app is shown or not shown (skipped) in the taskbar
 pub fn set_skip_taskbar(skip: bool) {
     if STATE.get().is_some() {
+        #[cfg(target_os = "windows")]
         return ctx(|s| s.window.set_skip_taskbar(skip));
     }
 
@@ -1159,12 +1161,20 @@ pub fn draw_text(t: &str, x: f32, y: f32, size: f32, font: Option<&Font>, color:
 ///         .with_size(32.0)
 /// ]);
 /// ```
-pub fn draw_rich_text<'a, I>(position: Vector2, size: f32, font: Option<&Font>, color: Color, spans: I)
-where
+pub fn draw_rich_text<'a, I>(
+    position: Vector2,
+    size: f32,
+    font: Option<&Font>,
+    color: Color,
+    spans: I,
+) where
     I: IntoIterator,
     I::Item: Borrow<Span<'a>>,
 {
-    ctx(|s| s.draw_state.draw_richtext(position, size, font, color, spans))
+    ctx(|s| {
+        s.draw_state
+            .draw_richtext(position, size, font, color, spans)
+    })
 }
 
 /// Loads a `.ttf`/`.otf` font from path and returns the `Font` object.
