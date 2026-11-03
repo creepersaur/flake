@@ -178,5 +178,7 @@ impl ApplicationHandler<State> for App {
 
             _ => {}
         }
+
+        state.push_event(event);
     }
 }

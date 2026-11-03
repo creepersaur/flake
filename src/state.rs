@@ -11,20 +11,20 @@ use crate::misc::timer::Timer;
 use crate::model::instance::InstanceRaw;
 use crate::model::texture::{GpuTexture, TextureEntry};
 use crate::model::vertex::Vertex;
-use crate::prelude::{BLACK, FilterType, Image};
+use crate::prelude::{FilterType, Image};
 use cgmath::Vector2;
 use cgmath::prelude::*;
 use device_query::DeviceState;
 use std::pin::Pin;
 use std::ptr::NonNull;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Waker};
 use std::time::Instant;
 use wgpu::{self, util::DeviceExt, *};
 use wgpu_text::glyph_brush::ab_glyph::{Font, FontVec, PxScale, ScaleFont};
 use wgpu_text::{BrushBuilder, TextBrush};
 use winit::dpi::PhysicalSize;
-use winit::event::MouseButton;
+use winit::event::{MouseButton, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::{Window, WindowLevel};
@@ -34,18 +34,23 @@ struct TextSlot {
     size: (u32, u32),
 }
 
+pub type PostRenderHook =
+    Box<dyn FnMut(&Device, &Queue, &mut CommandEncoder, &TextureView, (u32, u32))>;
+
 pub struct State {
     // Window, Surface & Device
     pub running: bool,
     pub window: Arc<Window>,
     surface: Surface<'static>,
-    pub device: Device,
-    queue: Queue,
-    config: SurfaceConfiguration,
+    pub device: Arc<Device>,
+    pub(crate) queue: Queue,
+    pub(crate) config: Arc<Mutex<SurfaceConfiguration>>,
     is_surface_configured: bool,
 
     // Runtime
     pub(crate) task: Option<Pin<Box<dyn Future<Output = ()>>>>,
+    pub event_list: Vec<WindowEvent>,
+    pub post_render_hooks: Vec<PostRenderHook>,
 
     // Pipeline
     render_pipeline: RenderPipeline,
@@ -115,16 +120,22 @@ impl State {
 
         /// # Render Pipeline
         let render_pipeline = Self::get_render_pipeline(
-            &device, &config, &camera_bind_group_layout, &texture_layout,
+            &device,
+            &config,
+            &camera_bind_group_layout,
+            &texture_layout,
             BlendState::ALPHA_BLENDING,
         );
         let render_pipeline_premul = Self::get_render_pipeline(
-            &device, &config, &camera_bind_group_layout, &texture_layout,
+            &device,
+            &config,
+            &camera_bind_group_layout,
+            &texture_layout,
             BlendState::PREMULTIPLIED_ALPHA_BLENDING,
         );
 
         /// # ANTI-ALIASING (MSAA)
-        let msaa_view = Self::create_msaa_view(&device, &config, config.width, config.height);
+        let msaa_view = Self::create_msaa_view(&device, config.format, config.width, config.height);
 
         let draw_state = DrawState::new(&device);
 
@@ -132,12 +143,14 @@ impl State {
             running: true,
             window,
             surface,
-            device,
+            device: Arc::new(device),
             queue,
-            config,
+            config: Arc::new(Mutex::new(config)),
             is_surface_configured: false,
 
             task: None,
+            event_list: Vec::with_capacity(100),
+            post_render_hooks: Vec::with_capacity(10),
 
             render_pipeline,
             render_pipeline_premul,
@@ -146,7 +159,7 @@ impl State {
             textures: Vec::with_capacity(128),
             texture_layout,
 
-            clear_color: Some(BLACK),
+            clear_color: None,
             draw_state,
 
             fonts: Vec::with_capacity(10),
@@ -185,7 +198,7 @@ impl State {
 
     fn create_msaa_view(
         device: &Device,
-        config: &SurfaceConfiguration,
+        format: TextureFormat,
         width: u32,
         height: u32,
     ) -> TextureView {
@@ -200,7 +213,7 @@ impl State {
                 mip_level_count: 1,
                 sample_count: 4,
                 dimension: TextureDimension::D2,
-                format: config.format,
+                format,
                 usage: TextureUsages::RENDER_ATTACHMENT,
                 view_formats: &[],
             })
@@ -371,7 +384,11 @@ impl State {
                 },
             ],
         });
-        self.textures.push(TextureEntry { gpu, bind_group, premultiplied: false });
+        self.textures.push(TextureEntry {
+            gpu,
+            bind_group,
+            premultiplied: false,
+        });
         self.textures.len() - 1
     }
 
@@ -390,7 +407,11 @@ impl State {
                 },
             ],
         });
-        self.textures.push(TextureEntry { gpu, bind_group, premultiplied });
+        self.textures.push(TextureEntry {
+            gpu,
+            bind_group,
+            premultiplied,
+        });
         self.textures.len() - 1
     }
 
@@ -547,21 +568,18 @@ impl State {
         if width == 0 || height == 0 {
             return;
         }
-        self.config.width = width;
-        self.config.height = height;
-        self.surface.configure(&self.device, &self.config);
+        let mut config = self.config.lock().unwrap();
+        (*config).width = width;
+        (*config).height = height;
+        self.surface.configure(&self.device, &config);
         self.is_surface_configured = true;
 
-        self.msaa_view = Self::create_msaa_view(
-            &self.device,
-            &self.config,
-            self.config.width,
-            self.config.height,
-        );
+        self.msaa_view =
+            Self::create_msaa_view(&self.device, config.format, config.width, config.height);
         self.depth_texture = GpuTexture::create_depth_texture(
             &self.device,
-            self.config.width,
-            self.config.height,
+            config.width,
+            config.height,
             "depth_texture",
         );
 
@@ -651,6 +669,7 @@ impl State {
         self.keyboard_state.clear_just_pressed();
         self.mouse_state.clear_just_pressed();
         self.mouse_state.clear_mouse_wheel();
+        self.event_list.clear();
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {
@@ -666,7 +685,8 @@ impl State {
                 return Ok(()); // skip frame
             }
             CurrentSurfaceTexture::Outdated => {
-                self.surface.configure(&self.device, &self.config);
+                self.surface
+                    .configure(&self.device, &self.config.lock().unwrap());
                 return Ok(());
             }
             CurrentSurfaceTexture::Lost => anyhow::bail!("Lost device"),
@@ -688,21 +708,18 @@ impl State {
                 if !self.draw_state.segment_has_text(i) {
                     continue;
                 }
+
+                let config = self.config.lock().unwrap();
                 let size = match &self.draw_state.segments()[i].target {
                     Some(rt) => (rt.texture.width, rt.texture.height),
-                    None => (self.config.width, self.config.height),
+                    None => (config.width, config.height),
                 };
 
                 if self.text_pool.len() <= i {
                     self.text_pool.resize_with(i + 1, || None);
                 }
                 let slot = self.text_pool[i].get_or_insert_with(|| TextSlot {
-                    brush: Self::build_text_brush(
-                        &self.device,
-                        &self.fonts,
-                        size,
-                        self.config.format,
-                    ),
+                    brush: Self::build_text_brush(&self.device, &self.fonts, size, config.format),
                     size,
                 });
                 if slot.size != size {
@@ -793,6 +810,16 @@ impl State {
             }
         }
 
+        let size = {
+            let c = self.config.lock().unwrap();
+            (c.width, c.height)
+        };
+        let mut hooks = std::mem::take(&mut self.post_render_hooks);
+        for h in hooks.iter_mut() {
+            h(&self.device, &self.queue, &mut encoder, &view, size);
+        }
+        self.post_render_hooks = hooks;
+
         self.queue.submit(std::iter::once(encoder.finish()));
         self.queue.present(output);
 
@@ -836,6 +863,10 @@ impl State {
     pub fn set_default_camera(&mut self) {
         self.draw_state
             .begin_segment(None, None, Vector2::zero(), 1.0);
+    }
+
+    pub fn push_event(&mut self, event: WindowEvent) {
+        self.event_list.push(event);
     }
 }
 
@@ -1014,7 +1045,12 @@ impl State {
         height: u32,
         filter_type: FilterType,
     ) -> RenderTarget {
-        let gpu = GpuTexture::empty(&self.device, width, height, filter_type, self.config.format)
+        let format = {
+            let config = self.config.lock().unwrap();
+            config.format
+        };
+
+        let gpu = GpuTexture::empty(&self.device, width, height, filter_type, format)
             .expect("Couldn't create empty GpuTexture");
 
         RenderTarget {
@@ -1024,7 +1060,7 @@ impl State {
                 height,
             },
 
-            msaa_view: Self::create_msaa_view(&self.device, &self.config, width, height),
+            msaa_view: Self::create_msaa_view(&self.device, format, width, height),
 
             depth: GpuTexture::create_depth_texture(&self.device, width, height, "depth_texture"),
         }

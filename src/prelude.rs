@@ -24,8 +24,10 @@ pub use crate::runtime::next_frame::next_frame;
 pub use crate::{FlakeResult, flake};
 use image::{DynamicImage, GenericImageView, ImageBuffer, Rgb, Rgba};
 use std::borrow::Borrow;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use wgpu::{CommandEncoder, Device, Queue, SurfaceConfiguration, TextureView};
 pub use winit::event::MouseButton;
+pub use winit::event::WindowEvent;
 pub use winit::keyboard::KeyCode;
 #[cfg(target_os = "windows")]
 use winit::platform::windows::WindowExtWindows;
@@ -98,6 +100,64 @@ pub fn add_timer(timer: Timer) -> Timer {
 /// ```
 pub fn get_window() -> Arc<Window> {
     ctx(|s| s.get_window())
+}
+
+/// Gets the wgpu device used by the application
+///
+/// # Examples
+///
+/// ```
+/// let device = get_device();
+/// ```
+pub fn get_device() -> Arc<Device> {
+    ctx(|s| s.device.clone())
+}
+
+/// Gets the wgpu queue used by the application
+///
+/// # Examples
+///
+/// ```
+/// let queue = get_queue();
+/// ```
+pub fn get_queue() -> Queue {
+    ctx(|s| s.queue.clone())
+}
+
+/// Adds a post render hook to the application.
+/// Binds a closure which will run before submitting the queue.
+///
+/// # Examples
+///
+/// ```
+/// let queue = get_queue();
+/// ```
+pub fn add_post_render_hook(
+    hook: impl FnMut(&Device, &Queue, &mut CommandEncoder, &TextureView, (u32, u32)) + 'static,
+) {
+    ctx(|s| s.post_render_hooks.push(Box::new(hook)));
+}
+
+/// Gets the wgpu surface config used by the application
+///
+/// # Examples
+///
+/// ```
+/// let config = get_surface_config();
+/// ```
+pub fn get_surface_config() -> Arc<Mutex<SurfaceConfiguration>> {
+    ctx(|s| s.config.clone())
+}
+
+/// Gets the window events that happened this frame
+///
+/// # Examples
+///
+/// ```
+/// let events = get_window_events();
+/// ```
+pub fn get_window_events() -> Vec<WindowEvent> {
+    ctx(|s| s.event_list.clone())
 }
 
 /// Sets whether window catches mouse events.
