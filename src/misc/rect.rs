@@ -1,9 +1,4 @@
-use crate::prelude::{
-    Color, Vector2, draw_line, draw_rectangle_from_rect, draw_rectangle_lines_from_rect,
-    draw_rectangle_lines_rounded_from_rect, draw_rectangle_lines_rounded_from_rect_ex,
-    draw_rectangle_rotated, draw_rectangle_rounded_from_rect, draw_rectangle_rounded_from_rect_ex,
-    mouse_position_vec2,
-};
+use crate::prelude::{draw_line, draw_rectangle_from_rect, draw_rectangle_lines_from_rect, draw_rectangle_lines_rounded_from_rect, draw_rectangle_lines_rounded_from_rect_ex, draw_rectangle_rotated, draw_rectangle_rounded_from_rect, draw_rectangle_rounded_from_rect_ex, mouse_position_vec2, mouse_position_vec2_global, Color, Vector2};
 use cgmath::vec2;
 
 /// # Rect
@@ -275,9 +270,19 @@ impl Rect {
         self.contains_point_vec2(mouse_position_vec2())
     }
 
+    /// Test if mouse lies inside/on the Rect even if the window is unfocused
+    pub fn contains_mouse_global(&self) -> bool {
+        self.contains_point_vec2(mouse_position_vec2_global())
+    }
+
     /// Test if mouse lies inside/on the Rect
     pub fn contains_mouse_fully(&self) -> bool {
         self.contains_point_fully_vec2(mouse_position_vec2())
+    }
+
+    /// Test if mouse lies inside/on the Rect even if window is unfocused
+    pub fn contains_mouse_fully_global(&self) -> bool {
+        self.contains_point_fully_vec2(mouse_position_vec2_global())
     }
 
     /// AABB overlap test
