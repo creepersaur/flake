@@ -162,14 +162,6 @@ impl MouseState {
         self.global_position
     }
 
-    pub fn get_delta(&self) -> Vector2<f32> {
-        self.delta.unwrap_or_else(Vector2::zero)
-    }
-
-    pub fn get_delta_global(&self) -> Vector2<f32> {
-        self.global_delta.unwrap_or_else(Vector2::zero)
-    }
-
     #[allow(unused)]
     #[inline(always)]
     pub fn get_screen_position_global(&self) -> Vector2<f32> {

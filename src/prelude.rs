@@ -721,6 +721,13 @@ pub fn get_vector_global(left: KeyCode, right: KeyCode, up: KeyCode, down: KeyCo
     )
 }
 
+/// Application will block this key and swallow it before the rest of the OS can use it.
+/// Useful for global keyboard shortcuts. (May not work on all operating systems.)
+pub fn block_key(key: KeyCode)   { ctx(|s| s.block_key(key)) }
+
+/// Keys blocked with `block_key()` will be unblocked.
+pub fn unblock_key(key: KeyCode) { ctx(|s| s.unblock_key(key)) }
+
 // -- DRAWING --------------------------------------------------------------------------------------------------------------
 
 /// Clears the background using a color.

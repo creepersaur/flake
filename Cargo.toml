@@ -3,7 +3,7 @@ name = "flake"
 
 [package]
 name = "flake-engine"
-version = "0.1.6"
+version = "0.1.7"
 authors = ["creepersaur"]
 edition = "2024"
 description = "Immediate-mode game framework built on wgpu + winit"
@@ -22,7 +22,7 @@ wgpu = "30.0"
 pollster = "0.3"
 bytemuck = { version = "1.24", features = [ "derive" ] }
 cgmath = "0.18"
-rdev = "0.5"
+rdev = { version = "0.5", features = ["unstable_grab"] }
 wgpu_text = "30.0.0"
 
 [dev-dependencies]

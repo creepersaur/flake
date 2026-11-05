@@ -1,7 +1,8 @@
 use std::collections::HashSet;
+use std::sync::{Arc, RwLock};
 use winit::keyboard::KeyCode;
 
-#[derive(Default, Clone, PartialEq)]
+#[derive(Default, Clone)]
 pub struct KeyboardState {
     pressed_keys: HashSet<KeyCode>,
     just_pressed: HashSet<KeyCode>,
@@ -10,6 +11,8 @@ pub struct KeyboardState {
     global_pressed_keys: HashSet<KeyCode>,
     global_just_pressed: HashSet<KeyCode>,
     global_just_released: HashSet<KeyCode>,
+
+    pub blocked_keys: Arc<RwLock<HashSet<KeyCode>>>,
 }
 
 impl KeyboardState {

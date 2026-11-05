@@ -1,4 +1,5 @@
 #![allow(unused_doc_comments)]
+
 use crate::camera::camera2d::Camera2D;
 use crate::camera::camera3d::Camera3D;
 use crate::camera::render_target::RenderTarget;
@@ -6,6 +7,7 @@ use crate::camera::{Camera, CameraUniform};
 use crate::draw_state::draw_state::DrawState;
 use crate::global::STATE;
 use crate::input::keyboard::map_key;
+use crate::input::mouse::map_button;
 use crate::input::{GlobalInputEvent, keyboard::KeyboardState, mouse::MouseState};
 use crate::misc::font::Font as FlakeFont;
 use crate::misc::timer::Timer;
@@ -15,11 +17,12 @@ use crate::model::vertex::Vertex;
 use crate::prelude::{FilterType, Image};
 use cgmath::Vector2;
 use cgmath::prelude::*;
-use rdev::{EventType, listen};
+use rdev::EventType;
+use std::collections::HashSet;
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::mpsc::{Receiver, channel};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::task::{Context, Waker};
 use std::time::Instant;
 use wgpu::{self, util::DeviceExt, *};
@@ -140,6 +143,7 @@ impl State {
         let msaa_view = Self::create_msaa_view(&device, config.format, config.width, config.height);
 
         let draw_state = DrawState::new(&device);
+        let keyboard_state = KeyboardState::default();
 
         Ok(Self {
             running: true,
@@ -183,9 +187,9 @@ impl State {
             frames: 0,
             timers: Vec::with_capacity(10),
 
-            keyboard_state: KeyboardState::default(),
+            input_receiver: Self::spawn_global_listener(keyboard_state.blocked_keys.clone()),
             mouse_state: MouseState::default(),
-            input_receiver: Self::spawn_global_listener(),
+            keyboard_state,
         })
     }
 
@@ -874,7 +878,8 @@ impl State {
     pub fn handle_mouse_motion(&mut self, x: f32, y: f32) {
         self.mouse_state.set_position(x, y);
         if let Ok(p) = self.window.inner_position() {
-            self.mouse_state.set_screen_position(x + p.x as f32, y + p.y as f32);
+            self.mouse_state
+                .set_screen_position(x + p.x as f32, y + p.y as f32);
         }
     }
 
@@ -882,32 +887,45 @@ impl State {
         self.mouse_state.accumulate_mouse_wheel(x, y);
     }
 
-    pub fn spawn_global_listener() -> Receiver<GlobalInputEvent> {
+    pub fn spawn_global_listener(
+        blocked: Arc<RwLock<HashSet<KeyCode>>>,
+    ) -> Receiver<GlobalInputEvent> {
         let (tx, rx) = channel();
         std::thread::spawn(move || {
-            let _ = listen(move |event| {
+            let result = rdev::grab(move |event| {
+                let mut swallow = false;
+
                 let msg = match event.event_type {
-                    EventType::ButtonPress(b) => Some(GlobalInputEvent::Button(
-                        crate::input::mouse::map_button(b),
-                        true,
-                    )),
-                    EventType::ButtonRelease(b) => Some(GlobalInputEvent::Button(
-                        crate::input::mouse::map_button(b),
-                        false,
-                    )),
+                    EventType::ButtonPress(b) => {
+                        Some(GlobalInputEvent::Button(map_button(b), true))
+                    }
+                    EventType::ButtonRelease(b) => {
+                        Some(GlobalInputEvent::Button(map_button(b), false))
+                    }
                     EventType::Wheel { delta_x, delta_y } => {
                         Some(GlobalInputEvent::Wheel(delta_x as f32, delta_y as f32))
                     }
                     EventType::MouseMove { x, y } => {
                         Some(GlobalInputEvent::Move(x as f32, y as f32))
                     }
-                    EventType::KeyPress(k) => map_key(k).map(|k| GlobalInputEvent::Key(k, true)),
-                    EventType::KeyRelease(k) => map_key(k).map(|k| GlobalInputEvent::Key(k, false)),
+                    EventType::KeyPress(k) | EventType::KeyRelease(k) => {
+                        let down = matches!(event.event_type, EventType::KeyPress(_));
+                        map_key(k).map(|code| {
+                            swallow = blocked.read().unwrap().contains(&code);
+                            GlobalInputEvent::Key(code, down)
+                        })
+                    }
                 };
+
                 if let Some(m) = msg {
                     let _ = tx.send(m);
                 }
+
+                if swallow { None } else { Some(event) }
             });
+            if let Err(e) = result {
+                eprintln!("rdev grab error: {e:?}");
+            }
         });
         rx
     }
@@ -1107,5 +1125,22 @@ impl State {
 
             depth: GpuTexture::create_depth_texture(&self.device, width, height, "depth_texture"),
         }
+    }
+
+    /// Keyboard Blocking
+
+    pub fn block_key(&self, key: KeyCode) {
+        self.keyboard_state
+            .blocked_keys
+            .write()
+            .unwrap()
+            .insert(key);
+    }
+    pub fn unblock_key(&self, key: KeyCode) {
+        self.keyboard_state
+            .blocked_keys
+            .write()
+            .unwrap()
+            .remove(&key);
     }
 }
