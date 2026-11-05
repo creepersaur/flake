@@ -598,7 +598,7 @@ impl State {
         let mut mouse_events = Vec::new();
         while let Ok(ev) = self.input_receiver.try_recv() {
             match ev {
-                GlobalInputEvent::Key(k, d) => key_events.push((k, d)),
+                GlobalInputEvent::Key(k, n, d) => key_events.push((k, n, d)),
                 other => mouse_events.push(other),
             }
         }
@@ -912,7 +912,7 @@ impl State {
                         let down = matches!(event.event_type, EventType::KeyPress(_));
                         map_key(k).map(|code| {
                             swallow = blocked.read().unwrap().contains(&code);
-                            GlobalInputEvent::Key(code, down)
+                            GlobalInputEvent::Key(code, event.name.clone(), down)
                         })
                     }
                 };
@@ -1136,11 +1136,24 @@ impl State {
             .unwrap()
             .insert(key);
     }
+
     pub fn unblock_key(&self, key: KeyCode) {
         self.keyboard_state
             .blocked_keys
             .write()
             .unwrap()
             .remove(&key);
+    }
+
+    pub fn get_pressed_keys(&mut self) -> impl Iterator<Item = KeyCode> {
+        self.keyboard_state.get_pressed_keys()
+    }
+
+    pub fn get_pressed_keys_global(&mut self) -> impl Iterator<Item = KeyCode> {
+        self.keyboard_state.get_pressed_keys_global()
+    }
+
+    pub fn last_key_name(&mut self) -> Option<String> {
+        self.keyboard_state.last_key_name.clone()
     }
 }

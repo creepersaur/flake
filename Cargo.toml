@@ -3,7 +3,7 @@ name = "flake"
 
 [package]
 name = "flake-engine"
-version = "0.1.8"
+version = "0.1.9"
 authors = ["creepersaur"]
 edition = "2024"
 description = "Immediate-mode game framework built on wgpu + winit"
@@ -24,6 +24,7 @@ bytemuck = { version = "1.24", features = [ "derive" ] }
 cgmath = "0.18"
 rdev = { version = "0.5", features = ["unstable_grab"] }
 wgpu_text = "30.0.0"
+arrayvec = "0.7.8"
 
 [dev-dependencies]
 rand = "0.10.3"

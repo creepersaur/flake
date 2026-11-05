@@ -22,6 +22,7 @@ pub use crate::model::texture::FilterType;
 use crate::model::texture::{GpuTexture, Texture};
 pub use crate::runtime::next_frame::next_frame;
 pub use crate::{FlakeResult, flake};
+use arrayvec::ArrayVec;
 use image::{DynamicImage, GenericImageView, ImageBuffer, Rgb, Rgba};
 use std::borrow::Borrow;
 use std::sync::{Arc, Mutex};
@@ -715,18 +716,43 @@ pub fn get_axis_global(left: KeyCode, right: KeyCode) -> f32 {
 
 /// Like `get_vector`, but from global key state. Up is -1.0 on Y.
 pub fn get_vector_global(left: KeyCode, right: KeyCode, up: KeyCode, down: KeyCode) -> Vector2 {
-    Vector2::new(
-        get_axis_global(left, right),
-        get_axis_global(up, down),
-    )
+    Vector2::new(get_axis_global(left, right), get_axis_global(up, down))
 }
 
 /// Application will block this key and swallow it before the rest of the OS can use it.
 /// Useful for global keyboard shortcuts. (May not work on all operating systems.)
-pub fn block_key(key: KeyCode)   { ctx(|s| s.block_key(key)) }
+pub fn block_key(key: KeyCode) {
+    ctx(|s| s.block_key(key))
+}
 
 /// Keys blocked with `block_key()` will be unblocked.
-pub fn unblock_key(key: KeyCode) { ctx(|s| s.unblock_key(key)) }
+pub fn unblock_key(key: KeyCode) {
+    ctx(|s| s.unblock_key(key))
+}
+
+/// Returns an iterator containing all held keys this frame.
+pub fn get_pressed_keys() -> impl Iterator<Item = KeyCode> {
+    ctx(|s| {
+        s.get_pressed_keys()
+            .collect::<ArrayVec<KeyCode, 32>>()
+            .into_iter()
+    })
+}
+
+/// Returns an iterator containing all held keys this frame globally.
+pub fn get_pressed_keys_global() -> impl Iterator<Item = KeyCode> {
+    ctx(|s| {
+        s.get_pressed_keys_global()
+            .collect::<ArrayVec<KeyCode, 32>>()
+            .into_iter()
+    })
+}
+
+/// Returns the name of the last key that was pressed.
+/// If name wasn't valid it will return None.
+pub fn last_key_name() -> Option<String> {
+    ctx(|s| s.last_key_name())
+}
 
 // -- DRAWING --------------------------------------------------------------------------------------------------------------
 

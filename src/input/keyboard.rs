@@ -12,10 +12,19 @@ pub struct KeyboardState {
     global_just_pressed: HashSet<KeyCode>,
     global_just_released: HashSet<KeyCode>,
 
+    pub last_key_name: Option<String>,
     pub blocked_keys: Arc<RwLock<HashSet<KeyCode>>>,
 }
 
 impl KeyboardState {
+    pub fn get_pressed_keys(&mut self) -> impl Iterator<Item = KeyCode> {
+        self.pressed_keys.iter().copied()
+    }
+
+    pub fn get_pressed_keys_global(&mut self) -> impl Iterator<Item = KeyCode> {
+        self.global_pressed_keys.iter().copied()
+    }
+
     pub fn set_key_pressed(&mut self, keycode: KeyCode, is_pressed: bool) {
         if is_pressed {
             self.pressed_keys.insert(keycode);
@@ -26,10 +35,12 @@ impl KeyboardState {
         }
     }
 
-    pub fn set_key_pressed_global(&mut self, keycode: KeyCode, is_pressed: bool) {
+    pub fn set_key_pressed_global(&mut self, keycode: KeyCode, name: Option<String>, is_pressed: bool) {
         if is_pressed {
             self.global_pressed_keys.insert(keycode);
             self.global_just_pressed.insert(keycode);
+
+            self.last_key_name = name;
         } else {
             self.global_pressed_keys.remove(&keycode);
             self.global_just_released.insert(keycode);
@@ -69,12 +80,12 @@ impl KeyboardState {
         self.global_just_released.clear();
     }
 
-    pub fn poll_global(&mut self, key_events: impl Iterator<Item = (KeyCode, bool)>) {
-        for (key, down) in key_events {
+    pub fn poll_global(&mut self, key_events: impl Iterator<Item = (KeyCode, Option<String>, bool)>) {
+        for (key, name, down) in key_events {
             if down && self.global_pressed_keys.contains(&key) {
                 continue; // key repeat
             }
-            self.set_key_pressed_global(key, down);
+            self.set_key_pressed_global(key, name, down);
         }
     }
 }

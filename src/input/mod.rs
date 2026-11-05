@@ -8,5 +8,5 @@ pub enum GlobalInputEvent {
     Button(MouseButton, bool), // (button, is_pressed)
     Wheel(f32, f32),
     Move(f32, f32),
-    Key(KeyCode, bool), // (key, is_pressed)
+    Key(KeyCode, Option<String>, bool), // (key, is_pressed)
 }
