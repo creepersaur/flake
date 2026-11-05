@@ -650,6 +650,77 @@ pub fn get_vector(left: KeyCode, right: KeyCode, up: KeyCode, down: KeyCode) -> 
     })
 }
 
+// -- GLOBAL INPUT (system-wide, works while unfocused) ----------------------------
+
+/// Window-relative mouse position, tracked system-wide (updates outside the window too).
+pub fn mouse_position_global() -> (f32, f32) {
+    ctx(|s| s.mouse_state.get_position_global().into())
+}
+
+pub fn mouse_position_vec2_global() -> Vector2 {
+    ctx(|s| s.mouse_state.get_position_global())
+}
+
+/// Screen-space mouse position, tracked system-wide.
+pub fn mouse_screen_position_global() -> (f32, f32) {
+    ctx(|s| s.mouse_state.get_screen_position_global().into())
+}
+
+pub fn mouse_screen_position_vec2_global() -> Vector2 {
+    ctx(|s| s.mouse_state.get_screen_position_global())
+}
+
+/// Scroll this frame, system-wide.
+pub fn mouse_wheel_global() -> Vector2 {
+    ctx(|s| s.mouse_state.get_mouse_wheel_global())
+}
+
+pub fn is_mouse_button_down_global(btn: MouseButton) -> bool {
+    ctx(|s| s.mouse_state.is_button_down_global(btn))
+}
+
+pub fn is_mouse_button_pressed_global(btn: MouseButton) -> bool {
+    ctx(|s| s.mouse_state.is_button_pressed_global(btn))
+}
+
+pub fn is_mouse_button_released_global(btn: MouseButton) -> bool {
+    ctx(|s| s.mouse_state.is_button_released_global(btn))
+}
+
+pub fn is_key_down_global(key: KeyCode) -> bool {
+    ctx(|s| s.keyboard_state.is_key_down_global(key))
+}
+
+pub fn is_key_pressed_global(key: KeyCode) -> bool {
+    ctx(|s| s.keyboard_state.is_key_pressed_global(key))
+}
+
+pub fn is_key_released_global(key: KeyCode) -> bool {
+    ctx(|s| s.keyboard_state.is_key_released_global(key))
+}
+
+/// Like `get_axis`, but from global key state.
+pub fn get_axis_global(left: KeyCode, right: KeyCode) -> f32 {
+    ctx(|s| {
+        match (
+            s.keyboard_state.is_key_down_global(left),
+            s.keyboard_state.is_key_down_global(right),
+        ) {
+            (true, false) => -1.0,
+            (false, true) => 1.0,
+            _ => 0.0,
+        }
+    })
+}
+
+/// Like `get_vector`, but from global key state. Up is -1.0 on Y.
+pub fn get_vector_global(left: KeyCode, right: KeyCode, up: KeyCode, down: KeyCode) -> Vector2 {
+    Vector2::new(
+        get_axis_global(left, right),
+        get_axis_global(up, down),
+    )
+}
+
 // -- DRAWING --------------------------------------------------------------------------------------------------------------
 
 /// Clears the background using a color.

@@ -5,7 +5,8 @@ use crate::camera::render_target::RenderTarget;
 use crate::camera::{Camera, CameraUniform};
 use crate::draw_state::draw_state::DrawState;
 use crate::global::STATE;
-use crate::input::{keyboard::KeyboardState, mouse::MouseState};
+use crate::input::keyboard::map_key;
+use crate::input::{GlobalInputEvent, keyboard::KeyboardState, mouse::MouseState};
 use crate::misc::font::Font as FlakeFont;
 use crate::misc::timer::Timer;
 use crate::model::instance::InstanceRaw;
@@ -14,9 +15,10 @@ use crate::model::vertex::Vertex;
 use crate::prelude::{FilterType, Image};
 use cgmath::Vector2;
 use cgmath::prelude::*;
-use device_query::DeviceState;
+use rdev::{EventType, listen};
 use std::pin::Pin;
 use std::ptr::NonNull;
+use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Waker};
 use std::time::Instant;
@@ -87,9 +89,9 @@ pub struct State {
     pub timers: Vec<Timer>,
 
     // Input
-    device_state: DeviceState,
     pub keyboard_state: KeyboardState,
     pub mouse_state: MouseState,
+    input_receiver: Receiver<GlobalInputEvent>,
 }
 
 impl State {
@@ -181,9 +183,9 @@ impl State {
             frames: 0,
             timers: Vec::with_capacity(10),
 
-            device_state: DeviceState::new(),
             keyboard_state: KeyboardState::default(),
             mouse_state: MouseState::default(),
+            input_receiver: Self::spawn_global_listener(),
         })
     }
 
@@ -587,25 +589,18 @@ impl State {
         self.camera.height = height as f32;
     }
 
-    pub fn handle_key(&mut self, _event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
-        self.keyboard_state.set_key_pressed(code, is_pressed);
-    }
-
-    pub fn handle_mouse_button(&mut self, button: MouseButton, is_pressed: bool) {
-        self.mouse_state.set_pressed_button(button, is_pressed);
-    }
-
-    pub fn handle_mouse_motion(&mut self, x: f32, y: f32) {
-        self.mouse_state.set_position(x, y);
-    }
-
-    pub fn handle_mouse_wheel(&mut self, x: f32, y: f32) {
-        self.mouse_state.accumulate_mouse_wheel(x, y);
-    }
-
     pub fn update(&mut self) {
+        let mut key_events = Vec::new();
+        let mut mouse_events = Vec::new();
+        while let Ok(ev) = self.input_receiver.try_recv() {
+            match ev {
+                GlobalInputEvent::Key(k, d) => key_events.push((k, d)),
+                other => mouse_events.push(other),
+            }
+        }
         self.mouse_state
-            .update_position(&self.window, &self.device_state);
+            .poll_global(mouse_events.into_iter(), &*self.window);
+        self.keyboard_state.poll_global(key_events.into_iter());
 
         let now = Instant::now();
         self.frames += 1;
@@ -666,9 +661,8 @@ impl State {
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
 
-        self.keyboard_state.clear_just_pressed();
-        self.mouse_state.clear_just_pressed();
-        self.mouse_state.clear_mouse_wheel();
+        self.keyboard_state.clear();
+        self.mouse_state.clear();
         self.event_list.clear();
     }
 
@@ -867,6 +861,55 @@ impl State {
 
     pub fn push_event(&mut self, event: WindowEvent) {
         self.event_list.push(event);
+    }
+
+    pub fn handle_key(&mut self, _event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
+        self.keyboard_state.set_key_pressed(code, is_pressed);
+    }
+
+    pub fn handle_mouse_button(&mut self, button: MouseButton, is_pressed: bool) {
+        self.mouse_state.set_pressed_button(button, is_pressed);
+    }
+
+    pub fn handle_mouse_motion(&mut self, x: f32, y: f32) {
+        self.mouse_state.set_position(x, y);
+        if let Ok(p) = self.window.inner_position() {
+            self.mouse_state.set_screen_position(x + p.x as f32, y + p.y as f32);
+        }
+    }
+
+    pub fn handle_mouse_wheel(&mut self, x: f32, y: f32) {
+        self.mouse_state.accumulate_mouse_wheel(x, y);
+    }
+
+    pub fn spawn_global_listener() -> Receiver<GlobalInputEvent> {
+        let (tx, rx) = channel();
+        std::thread::spawn(move || {
+            let _ = listen(move |event| {
+                let msg = match event.event_type {
+                    EventType::ButtonPress(b) => Some(GlobalInputEvent::Button(
+                        crate::input::mouse::map_button(b),
+                        true,
+                    )),
+                    EventType::ButtonRelease(b) => Some(GlobalInputEvent::Button(
+                        crate::input::mouse::map_button(b),
+                        false,
+                    )),
+                    EventType::Wheel { delta_x, delta_y } => {
+                        Some(GlobalInputEvent::Wheel(delta_x as f32, delta_y as f32))
+                    }
+                    EventType::MouseMove { x, y } => {
+                        Some(GlobalInputEvent::Move(x as f32, y as f32))
+                    }
+                    EventType::KeyPress(k) => map_key(k).map(|k| GlobalInputEvent::Key(k, true)),
+                    EventType::KeyRelease(k) => map_key(k).map(|k| GlobalInputEvent::Key(k, false)),
+                };
+                if let Some(m) = msg {
+                    let _ = tx.send(m);
+                }
+            });
+        });
+        rx
     }
 }
 
