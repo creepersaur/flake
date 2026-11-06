@@ -42,10 +42,13 @@ impl KeyboardState {
         keycode: KeyCode,
         name: Option<String>,
         is_pressed: bool,
+        repeat: bool,
     ) {
         if is_pressed {
-            self.global_pressed_keys.insert(keycode);
-            self.global_just_pressed.insert(keycode);
+            if !repeat {
+                self.global_pressed_keys.insert(keycode);
+                self.global_just_pressed.insert(keycode);
+            }
 
             if let Some(n) = name
                 .as_deref()
@@ -99,10 +102,12 @@ impl KeyboardState {
         key_events: impl Iterator<Item = (KeyCode, Option<String>, bool)>,
     ) {
         for (key, name, down) in key_events {
-            if down && self.global_pressed_keys.contains(&key) {
-                continue; // key repeat
-            }
-            self.set_key_pressed_global(key, name, down);
+            self.set_key_pressed_global(
+                key,
+                name,
+                down,
+                down && self.global_pressed_keys.contains(&key),
+            );
         }
     }
 }
