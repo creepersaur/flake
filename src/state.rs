@@ -1156,4 +1156,8 @@ impl State {
     pub fn last_key_name(&mut self) -> Option<String> {
         self.keyboard_state.last_key_name.clone()
     }
+
+    pub fn typed_string(&mut self) -> String {
+        self.keyboard_state.typed_string.clone()
+    }
 }

@@ -8,6 +8,20 @@ pub struct Font {
 }
 
 impl Font {
+    pub fn from_id(id: usize) -> Self {
+        Self {
+            id: FontId(id),
+            data: [].into()
+        }
+    }
+    
+    pub fn from_font_id(font_id: FontId) -> Self {
+        Self {
+            id: font_id,
+            data: [].into()
+        }
+    }
+    
     pub fn from_bytes_vec(id: usize, bytes: Vec<u8>) -> Self {
         Self {
             id: FontId(id),

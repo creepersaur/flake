@@ -139,9 +139,24 @@ mouse_screen_position() -> (f32, f32);
 mouse_screen_position_vec2() -> Vector2;
 
 mouse_wheel() -> Vector2;
+
 is_mouse_button_down(MouseButton) -> bool; // held
 is_mouse_button_pressed(MouseButton) -> bool; // clicked this frame
 is_mouse_button_released(MouseButton) -> bool; // released this frame
+
+// -- GLOBAL ------------------------------------------------------------
+// (Global methods, even when the window isn't focused)
+
+mouse_position_global() -> (f32, f32);
+mouse_position_vec2_global() -> Vector2;
+mouse_screen_position_global() -> (f32, f32);
+mouse_screen_position_vec2_global() -> Vector2;
+
+mouse_wheel_global() -> Vector2;
+
+is_mouse_button_down_global(MouseButton) -> bool; // held
+is_mouse_button_pressed_global(MouseButton) -> bool; // clicked this frame
+is_mouse_button_released_global(MouseButton) -> bool; // released this frame
 ```
 
 ### Keyboard Methods
@@ -156,6 +171,27 @@ get_axis(left: KeyCode, right: KeyCode) -> f32;
 
 // Returns a Vector2, similar to get_axis() but for 2 axes
 get_vector(left, right, up, down) -> Vector2;
+
+// -- GLOBAL ------------------------------------------------------------
+// (Global methods, even when the window isn't focused)
+
+is_key_down_global(KeyCode) -> bool; // held
+is_key_pressed_global(KeyCode) -> bool; // held
+is_key_released_global(KeyCode) -> bool; // held
+
+get_axis_global(left: KeyCode, right: KeyCode) -> f32;
+
+get_vector_global(left, right, up, down) -> Vector2;
+
+// Returns the name of the last char pressed (None if couldn't get it)
+last_key_name() -> Option<String>;
+
+// The text typed this frame;
+typed_text() -> String;
+
+// Swallows a key before reaching the OS. App can still detect them.
+block_key(KeyCode);
+unblock_key(KeyCode);
 ```
 
 ---
@@ -176,10 +212,12 @@ Load a font using the following:
 let my_font = load_font_from_path("Arial.ttf");
 // or
 let my_font = load_font_from_bytes( & [u8]);
+// or
+let my_font = Font::from_id(1); // if the font is already loaded into wgpu.
 ```
 
 Please do **NOT** load fonts inside the `loop {}` to avoid lag. Fonts are expensive. They should be loaded before the
-loop;
+loop.
 
 You can use a font like this:
 

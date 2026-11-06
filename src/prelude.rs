@@ -749,9 +749,15 @@ pub fn get_pressed_keys_global() -> impl Iterator<Item = KeyCode> {
 }
 
 /// Returns the name of the last key that was pressed.
-/// If name wasn't valid it will return None.
+/// If name wasn't valid it will return None. (Global)
 pub fn last_key_name() -> Option<String> {
     ctx(|s| s.last_key_name())
+}
+
+/// Returns the string that was typed on the keyboard this frame.
+/// If nothing was typed it will be an empty string. (Global)
+pub fn typed_string() -> String {
+    ctx(|s| s.typed_string())
 }
 
 // -- DRAWING --------------------------------------------------------------------------------------------------------------

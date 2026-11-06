@@ -23,6 +23,11 @@ impl Color {
         Self { r, g, b, a }
     }
 
+    /// Create a color using r, g, b. All values go from 0-1
+    pub const fn from_rgb(r: f32, g: f32, b: f32) -> Self {
+        Self { r, g, b, a: 1.0 }
+    }
+
     /// Get the same color a different transparency/alpha.
     pub const fn with_alpha(&self, alpha: f32) -> Self {
         Self::new(self.r, self.g, self.b, alpha)
@@ -228,6 +233,11 @@ impl Color {
         [self.r, self.g, self.b, self.a]
     }
 
+    /// Convert color to an array of [r, g, b]
+    pub const fn to_array_rgb(&self) -> [f32; 3] {
+        [self.r, self.g, self.b]
+    }
+
     /// Convert color to a `wgpu::Color`
     pub const fn to_wgpu(&self) -> wgpu::Color {
         wgpu::Color {
@@ -248,6 +258,42 @@ impl From<Color> for [f32; 4] {
 impl From<[f32; 4]> for Color {
     fn from(arr: [f32; 4]) -> Self {
         Self::new(arr[0], arr[1], arr[2], arr[3])
+    }
+}
+
+impl From<Color> for [f32; 3] {
+    fn from(c: Color) -> Self {
+        c.to_array_rgb()
+    }
+}
+
+impl From<[f32; 3]> for Color {
+    fn from(arr: [f32; 3]) -> Self {
+        Self::from_rgb(arr[0], arr[1], arr[2])
+    }
+}
+
+impl From<Color> for (f32, f32, f32, f32) {
+    fn from(c: Color) -> Self {
+        c.to_array().into()
+    }
+}
+
+impl From<(f32, f32, f32, f32)> for Color {
+    fn from(arr: (f32, f32, f32, f32)) -> Self {
+        Self::new(arr.0, arr.1, arr.2, arr.3)
+    }
+}
+
+impl From<Color> for (f32, f32, f32) {
+    fn from(c: Color) -> Self {
+        c.to_array_rgb().into()
+    }
+}
+
+impl From<(f32, f32, f32)> for Color {
+    fn from(arr: (f32, f32, f32)) -> Self {
+        Self::from_rgb(arr.0, arr.1, arr.2)
     }
 }
 

@@ -8,10 +8,7 @@ async fn main() {
     loop {
         clear_background(WHITE);
 
-        let h = get_pressed_keys().collect::<Vec<_>>();
-        if h.len() > 0 {
-            println!("{}, {:?}", h.len(), last_key_name());
-        }
+        println!("{}", typed_string());
 
         end_frame!();
     }
